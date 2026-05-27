@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: [--fix]
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -m "not docker"
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
