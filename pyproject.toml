@@ -1,6 +1,6 @@
 [project]
 name = "repro-lambda"
-version = "0.1.0"
+version = "0.2.0"
 description = "Build reproducible AWS Lambda packages outside Terraform, optimized for terraform-aws-lambda by serverless.tf."
 readme = "README.md"
 requires-python = ">=3.11"
