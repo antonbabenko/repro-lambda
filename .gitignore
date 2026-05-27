@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.coverage
+*.zip
+
+# Local-only tooling state (never published to public remote)
+.beads/
+.dolt/
+.beads-credential-key
+.claude/
+AGENTS.md
+CLAUDE.md
