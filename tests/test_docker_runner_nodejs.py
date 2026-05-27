@@ -73,3 +73,14 @@ def test_build_nodejs_lambda_orchestrates_install_then_sidecar_pack(
     mock_pack.assert_called_once()
     pack_kwargs = mock_pack.call_args.kwargs
     assert "python:3.13" in pack_kwargs["base_image_python"]
+
+
+def test_pack_in_python_sidecar_raises_on_unknown_arch(tmp_path: Path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    out = tmp_path / "lambda.zip"
+    with pytest.raises(DockerRunError, match="unsupported arch"):
+        pack_in_python_sidecar(
+            pkg_dir=pkg, out_zip=out,
+            base_image_python="x@sha256:0", arch="mips",
+        )

@@ -22,6 +22,14 @@ ARCH_TO_NPM_CPU: dict[str, str] = {
     "x86_64": "x64",
 }
 
+# Invariance: keys must match across all arch lookup tables. Adding a new arch
+# to one without the other would cause install_nodejs_dependencies to raise
+# KeyError instead of DockerRunError. Caught at import time.
+assert set(ARCH_TO_DOCKER_PLATFORM) == set(ARCH_TO_PIP_PLATFORM) == set(ARCH_TO_NPM_CPU), (
+    "arch lookup tables must share the same key set; "
+    f"DOCKER={set(ARCH_TO_DOCKER_PLATFORM)} PIP={set(ARCH_TO_PIP_PLATFORM)} NPM={set(ARCH_TO_NPM_CPU)}"
+)
+
 
 class DockerRunError(RuntimeError):
     pass
