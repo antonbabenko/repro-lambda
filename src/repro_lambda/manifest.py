@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    import tomli as tomllib
 
 SUPPORTED_RUNTIMES = {"python3.11", "python3.12", "python3.13"}
 SUPPORTED_ARCHS: tuple[str, ...] = ("arm64", "x86_64")
@@ -37,9 +32,7 @@ class LambdaSpec:
 @dataclass(frozen=True)
 class BuilderConfig:
     base_image_python: str
-    include_patterns: list[str] = field(
-        default_factory=lambda: ["**/*.py", "**/*.json"]
-    )
+    include_patterns: list[str] = field(default_factory=lambda: ["**/*.py", "**/*.json"])
     exclude_patterns: list[str] = field(
         default_factory=lambda: [
             ".venv/**",
@@ -88,8 +81,7 @@ def load_manifest(path: Path) -> Manifest:
         runtime = entry.get("runtime")
         if runtime not in SUPPORTED_RUNTIMES:
             raise ValueError(
-                f"{path}: unsupported runtime {runtime!r}; "
-                f"supported: {sorted(SUPPORTED_RUNTIMES)}"
+                f"{path}: unsupported runtime {runtime!r}; supported: {sorted(SUPPORTED_RUNTIMES)}"
             )
         arch = entry.get("arch")
         if arch not in SUPPORTED_ARCHS:
@@ -98,9 +90,7 @@ def load_manifest(path: Path) -> Manifest:
             )
         pkg = entry.get("package_manager", "pip")
         if pkg not in SUPPORTED_PACKAGE_MANAGERS:
-            raise ValueError(
-                f"{path}: unsupported package_manager {pkg!r}; v0.1 supports pip only"
-            )
+            raise ValueError(f"{path}: unsupported package_manager {pkg!r}; v0.1 supports pip only")
 
         lambdas.append(
             LambdaSpec(

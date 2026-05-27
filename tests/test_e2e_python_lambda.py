@@ -34,8 +34,7 @@ def test_two_independent_builds_produce_byte_identical_zips(tmp_path: Path):
     h = repo / "handler"
     h.mkdir()
     (h / "app.py").write_text(
-        "def lambda_handler(event, context):\n"
-        "    return {'statusCode': 200, 'body': 'ok'}\n"
+        "def lambda_handler(event, context):\n    return {'statusCode': 200, 'body': 'ok'}\n"
     )
     (h / "requirements.arm64.lock").write_text("")
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
@@ -51,9 +50,7 @@ def test_two_independent_builds_produce_byte_identical_zips(tmp_path: Path):
     for run_index in range(2):
         stage = tmp_path / f"stage{run_index}"
         stage_source(repo, "handler", builder, stage)
-        (stage / "requirements.lock").write_bytes(
-            (h / "requirements.arm64.lock").read_bytes()
-        )
+        (stage / "requirements.lock").write_bytes((h / "requirements.arm64.lock").read_bytes())
         out = stage / "lambda.zip"
         build_python_lambda(
             stage_dir=stage,

@@ -19,8 +19,7 @@ def git_repo_with_sample(tmp_path: Path) -> Path:
     h = tmp_path / "handler"
     h.mkdir()
     (h / "app.py").write_text(
-        "def lambda_handler(event, context):\n"
-        "    return {'statusCode': 200, 'body': 'ok'}\n"
+        "def lambda_handler(event, context):\n    return {'statusCode': 200, 'body': 'ok'}\n"
     )
     (h / "requirements.in").write_text("")
     (h / "requirements.arm64.lock").write_text("")
@@ -65,9 +64,7 @@ def test_build_one_cache_hit_skips_docker_and_returns_existing_sha(
             Bucket="dev-ctf-lambda-artifacts",
             CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
         )
-        sha = compute_sha_for(
-            repo_root=git_repo_with_sample, spec=spec, builder=builder
-        )
+        sha = compute_sha_for(repo_root=git_repo_with_sample, spec=spec, builder=builder)
         s3.put_object(
             Bucket="dev-ctf-lambda-artifacts",
             Key=f"lambdas/app/{sha}.zip",
@@ -89,9 +86,7 @@ def test_build_one_cache_hit_skips_docker_and_returns_existing_sha(
     assert catalog.lambdas["app"].current == sha
 
 
-def test_build_one_cache_miss_runs_docker_uploads_and_records(
-    git_repo_with_sample: Path, mocker
-):
+def test_build_one_cache_miss_runs_docker_uploads_and_records(git_repo_with_sample: Path, mocker):
     spec = _make_spec()
     builder = _make_builder()
     catalog = Catalog(lambdas={})

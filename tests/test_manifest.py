@@ -30,15 +30,15 @@ def test_lambda_spec_resolves_requirements_lock_template(fixtures_dir: Path):
 def test_load_manifest_rejects_unknown_runtime(tmp_path: Path):
     bad = tmp_path / "lambdas.toml"
     bad.write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "x"\n'
         'source_dir = "x"\n'
         'requirements_lock = "x.lock"\n'
         'runtime = "rust1.79"\n'
         'arch = "arm64"\n'
         'handler = "x.h"\n'
-        '\n'
-        '[builder]\n'
+        "\n"
+        "[builder]\n"
         'base_image_python = "x@sha256:0"\n'
     )
     with pytest.raises(ValueError, match="unsupported runtime"):
@@ -48,15 +48,15 @@ def test_load_manifest_rejects_unknown_runtime(tmp_path: Path):
 def test_load_manifest_rejects_unknown_arch(tmp_path: Path):
     bad = tmp_path / "lambdas.toml"
     bad.write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "x"\n'
         'source_dir = "x"\n'
         'requirements_lock = "x.lock"\n'
         'runtime = "python3.13"\n'
         'arch = "mips"\n'
         'handler = "x.h"\n'
-        '\n'
-        '[builder]\n'
+        "\n"
+        "[builder]\n"
         'base_image_python = "x@sha256:0"\n'
     )
     with pytest.raises(ValueError, match="unsupported arch"):
@@ -66,15 +66,15 @@ def test_load_manifest_rejects_unknown_arch(tmp_path: Path):
 def test_load_manifest_rejects_unpinned_base_image(tmp_path: Path):
     bad = tmp_path / "lambdas.toml"
     bad.write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "x"\n'
         'source_dir = "x"\n'
         'requirements_lock = "x.lock"\n'
         'runtime = "python3.13"\n'
         'arch = "arm64"\n'
         'handler = "x.h"\n'
-        '\n'
-        '[builder]\n'
+        "\n"
+        "[builder]\n"
         'base_image_python = "public.ecr.aws/lambda/python:3.13"\n'
     )
     with pytest.raises(ValueError, match="must be pinned by digest"):

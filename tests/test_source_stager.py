@@ -48,7 +48,9 @@ def test_stage_source_includes_only_git_tracked_matching_patterns(git_repo: Path
 
     assert sorted(file_list) == ["handler/app.py", "handler/data.json"]
 
-    assert (stage_dir / "source" / "app.py").read_text() == "def lambda_handler(e, c): return 'ok'\n"
+    assert (
+        stage_dir / "source" / "app.py"
+    ).read_text() == "def lambda_handler(e, c): return 'ok'\n"
     assert (stage_dir / "source" / "data.json").read_text() == '{"k": "v"}\n'
 
     assert not (stage_dir / "source" / "README.md").exists()

@@ -176,12 +176,17 @@ def lock(
         uv_platform = ARCH_TO_UV_PLATFORM[spec.arch]
         py_version = spec.runtime.removeprefix("python")
         cmd = [
-            "uv", "pip", "compile",
+            "uv",
+            "pip",
+            "compile",
             str(requirements_in),
-            "--python-version", py_version,
-            "--python-platform", uv_platform,
+            "--python-version",
+            py_version,
+            "--python-platform",
+            uv_platform,
             "--generate-hashes",
-            "-o", str(lock_path),
+            "-o",
+            str(lock_path),
         ]
         result = subprocess.run(cmd, check=False, capture_output=True, text=True)
         if result.returncode != 0:

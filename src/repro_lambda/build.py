@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from repro_lambda import __version__
@@ -136,6 +136,6 @@ def _record(
             region=spec.region,
             builder_version=__version__,
             base_image_digest=builder.base_image_python.split("@", 1)[-1],
-            built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            built_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         ),
     )

@@ -63,9 +63,7 @@ def load_catalog(path: Path) -> Catalog:
         return Catalog(lambdas={})
     raw = json.loads(path.read_text())
     if raw.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(
-            f"{path}: unsupported schema_version {raw.get('schema_version')!r}"
-        )
+        raise ValueError(f"{path}: unsupported schema_version {raw.get('schema_version')!r}")
     lambdas: dict[str, LambdaCatalog] = {}
     for name, lc in raw.get("lambdas", {}).items():
         history = [CatalogEntry(**e) for e in lc.get("history", [])]

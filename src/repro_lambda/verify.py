@@ -57,7 +57,5 @@ def verify_reproducible(
             shas.append(_sha256(out_zip))
 
     if shas[0] != shas[1]:
-        raise ReproducibilityError(
-            f"two builds produced different zips: {shas[0]} vs {shas[1]}"
-        )
+        raise ReproducibilityError(f"two builds produced different zips: {shas[0]} vs {shas[1]}")
     return shas[0], shas[1]

@@ -22,14 +22,14 @@ def consumer_repo(tmp_path: Path) -> Path:
     (repo / "handler" / "requirements.in").write_text("")
     (repo / "handler" / "requirements.arm64.lock").write_text("")
     (repo / "lambdas.toml").write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "app"\n'
         'source_dir = "handler"\n'
         'requirements_lock = "handler/requirements.${arch}.lock"\n'
         'runtime = "python3.13"\n'
         'arch = "arm64"\n'
         'handler = "app.lambda_handler"\n'
-        '[builder]\n'
+        "[builder]\n"
         'base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:' + "0" * 64 + '"\n'
     )
     subprocess.run(["git", "add", "."], cwd=repo, check=True)

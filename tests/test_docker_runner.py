@@ -47,8 +47,7 @@ def test_build_python_lambda_produces_a_zip(tmp_path: Path):
     stage_dir = tmp_path / "stage"
     (stage_dir / "source").mkdir(parents=True)
     (stage_dir / "source" / "app.py").write_text(
-        "def lambda_handler(event, context):\n"
-        "    return {'statusCode': 200, 'body': 'ok'}\n"
+        "def lambda_handler(event, context):\n    return {'statusCode': 200, 'body': 'ok'}\n"
     )
     (stage_dir / "requirements.lock").write_text("")
     out = tmp_path / "lambda.zip"

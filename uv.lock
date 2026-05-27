@@ -674,7 +674,6 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6" },
     { name = "repro-zipfile", specifier = ">=0.3.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "typer", specifier = ">=0.12" },
 ]
 provides-extras = ["dev"]
