@@ -63,3 +63,32 @@ def test_lock_uses_x86_64_platform_when_spec_targets_x86_64(tmp_path: Path, mock
     uv_calls = [c for c in spy.call_args_list if "uv" in str(c.args[0])]
     cmd = uv_calls[0].args[0]
     assert "x86_64-manylinux_2_28" in cmd
+
+
+def test_lock_skips_npm_specs(tmp_path: Path, mocker):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "handler").mkdir()
+    (repo / "lambdas.toml").write_text(
+        '[[lambda]]\n'
+        'logical_name = "edge"\n'
+        'source_dir = "handler"\n'
+        'requirements_lock = "handler/package-lock.json"\n'
+        'package_json = "handler/package.json"\n'
+        'runtime = "nodejs22.x"\n'
+        'arch = "x86_64"\n'
+        'handler = "index.handler"\n'
+        'package_manager = "npm"\n'
+        '[builder]\n'
+        'base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:' + "0" * 64 + '"\n'
+        'base_image_nodejs = "public.ecr.aws/lambda/nodejs:22@sha256:' + "0" * 64 + '"\n'
+    )
+    spy = mocker.patch(
+        "repro_lambda.cli.subprocess.run",
+        return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+    )
+    result = runner.invoke(app, ["lock", "--manifest", str(repo / "lambdas.toml")])
+    assert result.exit_code == 0, result.stdout
+    uv_calls = [c for c in spy.call_args_list if "uv" in str(c.args[0])]
+    assert not uv_calls, f"uv pip compile should not run for npm specs: {uv_calls}"
+    assert "skip edge" in result.stdout

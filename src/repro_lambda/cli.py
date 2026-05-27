@@ -168,6 +168,12 @@ def lock(
     repo_root = manifest.parent.resolve()
 
     for spec in parsed.lambdas:
+        if spec.package_manager == "npm":
+            typer.echo(
+                f"skip {spec.logical_name}: npm uses package-lock.json directly "
+                f"(regenerate with `npm install` upstream)"
+            )
+            continue
         requirements_in = repo_root / spec.source_dir / "requirements.in"
         if not requirements_in.exists():
             typer.echo(f"skip {spec.logical_name}: no {requirements_in}", err=True)
