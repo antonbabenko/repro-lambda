@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SUPPORTED_RUNTIMES = {
-    "python3.11", "python3.12", "python3.13",
-    "nodejs20.x", "nodejs22.x",
+    "python3.11",
+    "python3.12",
+    "python3.13",
+    "nodejs20.x",
+    "nodejs22.x",
 }
 SUPPORTED_ARCHS: tuple[str, ...] = ("arm64", "x86_64")
 SUPPORTED_PACKAGE_MANAGERS = {"pip", "npm"}

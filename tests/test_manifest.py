@@ -84,7 +84,7 @@ def test_load_manifest_rejects_unpinned_base_image(tmp_path: Path):
 def test_load_manifest_accepts_nodejs_runtime_with_npm(tmp_path: Path):
     ok = tmp_path / "lambdas.toml"
     ok.write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "edge"\n'
         'source_dir = "src/edge"\n'
         'requirements_lock = "src/edge/package-lock.json"\n'
@@ -93,7 +93,7 @@ def test_load_manifest_accepts_nodejs_runtime_with_npm(tmp_path: Path):
         'arch = "x86_64"\n'
         'handler = "index.handler"\n'
         'package_manager = "npm"\n'
-        '[builder]\n'
+        "[builder]\n"
         'base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:' + "0" * 64 + '"\n'
         'base_image_nodejs = "public.ecr.aws/lambda/nodejs:22@sha256:' + "0" * 64 + '"\n'
     )
@@ -109,7 +109,7 @@ def test_load_manifest_accepts_nodejs_runtime_with_npm(tmp_path: Path):
 def test_load_manifest_rejects_npm_without_pinned_nodejs_base_image(tmp_path: Path):
     bad = tmp_path / "lambdas.toml"
     bad.write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "edge"\n'
         'source_dir = "src/edge"\n'
         'requirements_lock = "src/edge/package-lock.json"\n'
@@ -118,7 +118,7 @@ def test_load_manifest_rejects_npm_without_pinned_nodejs_base_image(tmp_path: Pa
         'arch = "x86_64"\n'
         'handler = "index.handler"\n'
         'package_manager = "npm"\n'
-        '[builder]\n'
+        "[builder]\n"
         'base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:' + "0" * 64 + '"\n'
         'base_image_nodejs = "public.ecr.aws/lambda/nodejs:22"\n'
     )
@@ -129,7 +129,7 @@ def test_load_manifest_rejects_npm_without_pinned_nodejs_base_image(tmp_path: Pa
 def test_load_manifest_rejects_npm_without_package_json(tmp_path: Path):
     bad = tmp_path / "lambdas.toml"
     bad.write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "edge"\n'
         'source_dir = "src/edge"\n'
         'requirements_lock = "src/edge/package-lock.json"\n'
@@ -137,7 +137,7 @@ def test_load_manifest_rejects_npm_without_package_json(tmp_path: Path):
         'arch = "x86_64"\n'
         'handler = "index.handler"\n'
         'package_manager = "npm"\n'
-        '[builder]\n'
+        "[builder]\n"
         'base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:' + "0" * 64 + '"\n'
         'base_image_nodejs = "public.ecr.aws/lambda/nodejs:22@sha256:' + "0" * 64 + '"\n'
     )

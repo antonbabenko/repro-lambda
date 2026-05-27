@@ -143,19 +143,31 @@ def build_python_lambda(
     pyver_compact = pyver.replace(".", "")  # "313"
 
     cmd = [
-        "docker", "run", "--rm",
-        "--platform", ARCH_TO_DOCKER_PLATFORM[arch],
+        "docker",
+        "run",
+        "--rm",
+        "--platform",
+        ARCH_TO_DOCKER_PLATFORM[arch],
         *_docker_user_args(),
-        "-v", f"{stage_dir}:/src:ro",
-        "-v", f"{builder_root}:/builder:ro",
-        "-v", f"{out_dir}:/out",
-        "-e", "PYTHONPATH=/builder",
-        "-e", f"PIP_PLATFORM={ARCH_TO_PIP_PLATFORM[arch]}",
-        "-e", f"PIP_ABI=cp{pyver_compact}",
-        "-e", f"PIP_PYVER={pyver}",
-        "--entrypoint", "bash",
+        "-v",
+        f"{stage_dir}:/src:ro",
+        "-v",
+        f"{builder_root}:/builder:ro",
+        "-v",
+        f"{out_dir}:/out",
+        "-e",
+        "PYTHONPATH=/builder",
+        "-e",
+        f"PIP_PLATFORM={ARCH_TO_PIP_PLATFORM[arch]}",
+        "-e",
+        f"PIP_ABI=cp{pyver_compact}",
+        "-e",
+        f"PIP_PYVER={pyver}",
+        "--entrypoint",
+        "bash",
         base_image,
-        "-euxc", _PYTHON_INSTALL_SCRIPT,
+        "-euxc",
+        _PYTHON_INSTALL_SCRIPT,
     ]
     _run_docker(cmd)
 
@@ -180,16 +192,25 @@ def install_nodejs_dependencies(
     out_pkg_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "docker", "run", "--rm",
-        "--platform", ARCH_TO_DOCKER_PLATFORM[arch],
+        "docker",
+        "run",
+        "--rm",
+        "--platform",
+        ARCH_TO_DOCKER_PLATFORM[arch],
         *_docker_user_args(),
-        "-v", f"{stage_dir}:/src:ro",
-        "-v", f"{out_pkg_dir.parent}:/out",
-        "-e", f"NPM_CPU={ARCH_TO_NPM_CPU[arch]}",
-        "-e", f"NODE_VERSION={node_version}",
-        "--entrypoint", "bash",
+        "-v",
+        f"{stage_dir}:/src:ro",
+        "-v",
+        f"{out_pkg_dir.parent}:/out",
+        "-e",
+        f"NPM_CPU={ARCH_TO_NPM_CPU[arch]}",
+        "-e",
+        f"NODE_VERSION={node_version}",
+        "--entrypoint",
+        "bash",
         base_image,
-        "-euxc", _NODEJS_INSTALL_SCRIPT,
+        "-euxc",
+        _NODEJS_INSTALL_SCRIPT,
     ]
     _run_docker(cmd)
 
@@ -216,16 +237,25 @@ def pack_in_python_sidecar(
     builder_root = _builder_module_root()
 
     cmd = [
-        "docker", "run", "--rm",
-        "--platform", ARCH_TO_DOCKER_PLATFORM[arch],
+        "docker",
+        "run",
+        "--rm",
+        "--platform",
+        ARCH_TO_DOCKER_PLATFORM[arch],
         *_docker_user_args(),
-        "-v", f"{pkg_dir}:/in:ro",
-        "-v", f"{builder_root}:/builder:ro",
-        "-v", f"{out_dir}:/out",
-        "-e", "PYTHONPATH=/builder",
-        "--entrypoint", "bash",
+        "-v",
+        f"{pkg_dir}:/in:ro",
+        "-v",
+        f"{builder_root}:/builder:ro",
+        "-v",
+        f"{out_dir}:/out",
+        "-e",
+        "PYTHONPATH=/builder",
+        "--entrypoint",
+        "bash",
         base_image_python,
-        "-euxc", _SIDECAR_PACK_SCRIPT,
+        "-euxc",
+        _SIDECAR_PACK_SCRIPT,
     ]
     _run_docker(cmd)
 
@@ -246,10 +276,15 @@ def build_nodejs_lambda(
     """Two-container build: Node install + Python-sidecar pack."""
     pkg = out_zip.parent / "pkg"
     install_nodejs_dependencies(
-        stage_dir=stage_dir, out_pkg_dir=pkg,
-        base_image=base_image_nodejs, arch=arch, node_version=node_version,
+        stage_dir=stage_dir,
+        out_pkg_dir=pkg,
+        base_image=base_image_nodejs,
+        arch=arch,
+        node_version=node_version,
     )
     pack_in_python_sidecar(
-        pkg_dir=pkg, out_zip=out_zip,
-        base_image_python=base_image_python, arch=arch,
+        pkg_dir=pkg,
+        out_zip=out_zip,
+        base_image_python=base_image_python,
+        arch=arch,
     )

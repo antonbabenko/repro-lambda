@@ -53,9 +53,7 @@ def _is_recorded() -> bool:
     if "@sha256:" not in PINNED_PYTHON_IMAGE:
         return False
     # Reject placeholders like "image@sha256:" with no digest suffix.
-    if PINNED_PYTHON_IMAGE.endswith("@sha256:"):
-        return False
-    return True
+    return not PINNED_PYTHON_IMAGE.endswith("@sha256:")
 
 
 @pytest.mark.docker

@@ -1,5 +1,3 @@
-import shutil
-import sys
 from pathlib import Path
 
 import pytest
@@ -28,14 +26,15 @@ def test_install_nodejs_dependencies_raises_on_unknown_arch(tmp_path: Path):
     out_dir = tmp_path / "pkg"
     with pytest.raises(DockerRunError, match="unsupported arch"):
         install_nodejs_dependencies(
-            stage_dir=stage_dir, out_pkg_dir=out_dir,
-            base_image="x@sha256:0", arch="mips", node_version="22",
+            stage_dir=stage_dir,
+            out_pkg_dir=out_dir,
+            base_image="x@sha256:0",
+            arch="mips",
+            node_version="22",
         )
 
 
-def test_build_nodejs_lambda_orchestrates_install_then_sidecar_pack(
-    tmp_path: Path, mocker
-):
+def test_build_nodejs_lambda_orchestrates_install_then_sidecar_pack(tmp_path: Path, mocker):
     stage_dir = tmp_path / "stage"
     (stage_dir / "source").mkdir(parents=True)
     (stage_dir / "source" / "index.js").write_text("exports.handler = async () => ({});")
@@ -62,10 +61,12 @@ def test_build_nodejs_lambda_orchestrates_install_then_sidecar_pack(
 
     out = tmp_path / "lambda.zip"
     build_nodejs_lambda(
-        stage_dir=stage_dir, out_zip=out,
+        stage_dir=stage_dir,
+        out_zip=out,
         base_image_nodejs="public.ecr.aws/lambda/nodejs:22@sha256:" + "0" * 64,
         base_image_python="public.ecr.aws/lambda/python:3.13@sha256:" + "0" * 64,
-        arch="x86_64", node_version="22",
+        arch="x86_64",
+        node_version="22",
     )
     assert out.exists()
     assert out.stat().st_size > 0
@@ -81,6 +82,8 @@ def test_pack_in_python_sidecar_raises_on_unknown_arch(tmp_path: Path):
     out = tmp_path / "lambda.zip"
     with pytest.raises(DockerRunError, match="unsupported arch"):
         pack_in_python_sidecar(
-            pkg_dir=pkg, out_zip=out,
-            base_image_python="x@sha256:0", arch="mips",
+            pkg_dir=pkg,
+            out_zip=out,
+            base_image_python="x@sha256:0",
+            arch="mips",
         )

@@ -98,7 +98,7 @@ def test_verify_nodejs_uses_nodejs_builder(tmp_path: Path, mocker):
         '{"name": "x", "version": "1.0.0", "lockfileVersion": 3, "requires": true, "packages": {}}'
     )
     (repo / "lambdas.toml").write_text(
-        '[[lambda]]\n'
+        "[[lambda]]\n"
         'logical_name = "edge"\n'
         'source_dir = "handler"\n'
         'requirements_lock = "handler/package-lock.json"\n'
@@ -108,8 +108,8 @@ def test_verify_nodejs_uses_nodejs_builder(tmp_path: Path, mocker):
         'handler = "index.handler"\n'
         'region = "us-east-1"\n'
         'package_manager = "npm"\n'
-        'lambda_at_edge = true\n'
-        '[builder]\n'
+        "lambda_at_edge = true\n"
+        "[builder]\n"
         'base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:' + "0" * 64 + '"\n'
         'base_image_nodejs = "public.ecr.aws/lambda/nodejs:22@sha256:' + "0" * 64 + '"\n'
     )
@@ -120,17 +120,18 @@ def test_verify_nodejs_uses_nodejs_builder(tmp_path: Path, mocker):
         out_zip.write_bytes(b"PK\x05\x06" + b"\x00" * 18)
 
     mock_python = mocker.patch("repro_lambda.verify.build_python_lambda")
-    mock_nodejs = mocker.patch(
-        "repro_lambda.verify.build_nodejs_lambda", side_effect=fake_nodejs
-    )
+    mock_nodejs = mocker.patch("repro_lambda.verify.build_nodejs_lambda", side_effect=fake_nodejs)
     mocker.patch("repro_lambda.build.build_nodejs_lambda", side_effect=fake_nodejs)
 
     result = runner.invoke(
         app,
         [
-            "build", "edge",
-            "--manifest", str(repo / "lambdas.toml"),
-            "--verify", "--dry-run",
+            "build",
+            "edge",
+            "--manifest",
+            str(repo / "lambdas.toml"),
+            "--verify",
+            "--dry-run",
         ],
     )
     assert result.exit_code == 0, result.stdout

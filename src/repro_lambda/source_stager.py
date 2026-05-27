@@ -71,7 +71,7 @@ def stage_source(
         if src_mode & 0o111:
             dst.chmod(dst.stat().st_mode | 0o111)
 
-    for src_path, rel_name in (extra_files or []):
+    for src_path, rel_name in extra_files or []:
         if not src_path.is_file():
             raise FileNotFoundError(f"extra_files source not found: {src_path}")
         dest = stage_dir / rel_name

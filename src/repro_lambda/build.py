@@ -37,7 +37,9 @@ def _bucket_for(spec: LambdaSpec, base_bucket: str) -> str:
 
 
 def _extras_for(
-    spec: LambdaSpec, builder: BuilderConfig, repo_root: Path,
+    spec: LambdaSpec,
+    builder: BuilderConfig,
+    repo_root: Path,
 ) -> tuple[str, list[tuple[Path, str]]]:
     """Return (primary_base_image, extras) for the given package_manager."""
     lock_path = repo_root / spec.resolved_requirements_lock
