@@ -1,6 +1,7 @@
 import hashlib
 import zipfile
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -77,3 +78,20 @@ def test_pack_directory_excludes_no_extras(pkg_dir: Path, tmp_path: Path):
     with zipfile.ZipFile(out) as zf:
         names = zf.namelist()
     assert ".DS_Store" not in names
+
+
+def test_pack_directory_skips_symlinks(tmp_path: Path, capsys):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "real.py").write_text("ok\n")
+    link = src / "linked.py"
+    link.symlink_to(src / "real.py")
+
+    out = tmp_path / "out.zip"
+    pack_directory(src, out)
+
+    with ZipFile(out) as zf:
+        names = sorted(zf.namelist())
+    assert names == ["real.py"], names
+    captured = capsys.readouterr()
+    assert "symlink" in captured.err.lower()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import sys
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -44,6 +45,13 @@ def pack_directory(
 
     paths: list[Path] = []
     for p in src.rglob("*"):
+        if p.is_symlink():
+            print(
+                f"warning: skipping symlink {p.relative_to(src).as_posix()} "
+                f"(zip cannot preserve link semantics)",
+                file=sys.stderr,
+            )
+            continue
         rel = p.relative_to(src).as_posix()
         if _should_exclude(rel, exclude_glob):
             continue
