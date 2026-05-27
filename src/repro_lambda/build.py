@@ -10,7 +10,7 @@ from pathlib import Path
 
 from repro_lambda import __version__
 from repro_lambda.catalog import Catalog, CatalogEntry
-from repro_lambda.docker_runner import build_python_lambda
+from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
 from repro_lambda.hasher import compute_content_hash
 from repro_lambda.manifest import BuilderConfig, LambdaSpec
 from repro_lambda.s3_uploader import S3Uploader, UploadResult
@@ -36,6 +36,22 @@ def _bucket_for(spec: LambdaSpec, base_bucket: str) -> str:
     return base_bucket
 
 
+def _extras_for(
+    spec: LambdaSpec, builder: BuilderConfig, repo_root: Path,
+) -> tuple[str, list[tuple[Path, str]]]:
+    """Return (primary_base_image, extras) for the given package_manager."""
+    lock_path = repo_root / spec.resolved_requirements_lock
+    if spec.package_manager == "pip":
+        return builder.base_image_python, [(lock_path, "requirements.lock")]
+    if spec.package_manager == "npm":
+        package_json_path = repo_root / spec.package_json_resolved
+        return builder.base_image_nodejs, [
+            (package_json_path, "package.json"),
+            (lock_path, "package-lock.json"),
+        ]
+    raise ValueError(f"unsupported package_manager {spec.package_manager!r}")
+
+
 def compute_sha_for(
     *,
     repo_root: Path,
@@ -45,21 +61,26 @@ def compute_sha_for(
     """Stage source and compute the content hash; tempdir disposed on exit."""
     with tempfile.TemporaryDirectory(prefix="repro-lambda-") as td:
         stage_dir = Path(td)
+        lock_path = repo_root / spec.resolved_requirements_lock
+        if not lock_path.exists():
+            raise FileNotFoundError(f"requirements lock not found: {lock_path}")
+
+        primary_base_image, extras = _extras_for(spec, builder, repo_root)
+
         stage_source(
             repo_root=repo_root,
             source_dir=spec.source_dir,
             builder=builder,
             stage_dir=stage_dir,
+            extra_files=extras,
         )
-        lock_path = repo_root / spec.resolved_requirements_lock
-        if not lock_path.exists():
-            raise FileNotFoundError(f"requirements lock not found: {lock_path}")
         return compute_content_hash(
             staged_source_root=stage_dir / "source",
             requirements_lock=lock_path,
             spec=spec,
-            base_image=builder.base_image_python,
+            base_image=primary_base_image,
             builder_version=__version__,
+            extra_files=extras,
         )
 
 
@@ -78,19 +99,27 @@ def build_one(
 
     with tempfile.TemporaryDirectory(prefix="repro-lambda-") as td:
         stage_dir = Path(td)
+        lock_path = repo_root / spec.resolved_requirements_lock
+
+        # Select primary base image + extras BEFORE staging, in one place per pm.
+        primary_base_image, extras = _extras_for(spec, builder, repo_root)
+
+        # Stage source + extras once. Both cache-hit and cache-miss read this tree.
         stage_source(
             repo_root=repo_root,
             source_dir=spec.source_dir,
             builder=builder,
             stage_dir=stage_dir,
+            extra_files=extras,
         )
-        lock_path = repo_root / spec.resolved_requirements_lock
+
         sha = compute_content_hash(
             staged_source_root=stage_dir / "source",
             requirements_lock=lock_path,
             spec=spec,
-            base_image=builder.base_image_python,
+            base_image=primary_base_image,
             builder_version=__version__,
+            extra_files=extras,
         )
         bucket_key = f"lambdas/{spec.logical_name}/{sha}.zip"
 
@@ -103,18 +132,28 @@ def build_one(
             return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
 
         out_zip = stage_dir / "lambda.zip"
-        (stage_dir / "requirements.lock").write_bytes(lock_path.read_bytes())
-        build_python_lambda(
-            stage_dir=stage_dir,
-            out_zip=out_zip,
-            base_image=builder.base_image_python,
-            arch=spec.arch,
-            python_version=spec.runtime.removeprefix("python"),
-        )
+        if spec.package_manager == "pip":
+            build_python_lambda(
+                stage_dir=stage_dir,
+                out_zip=out_zip,
+                base_image=builder.base_image_python,
+                arch=spec.arch,
+                python_version=spec.runtime.removeprefix("python"),
+            )
+        else:  # npm
+            # nodejs22.x -> "22"; nodejs20.x -> "20"
+            node_ver = spec.runtime.removeprefix("nodejs").removesuffix(".x")
+            build_nodejs_lambda(
+                stage_dir=stage_dir,
+                out_zip=out_zip,
+                base_image_nodejs=builder.base_image_nodejs,
+                base_image_python=builder.base_image_python,
+                arch=spec.arch,
+                node_version=node_ver,
+            )
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}
-
         _record(catalog, spec, sha, source_commit, builder)
         return BuildOutcome(BuildResult.BUILT_AND_UPLOADED, sha, bucket_key)
 
@@ -126,6 +165,10 @@ def _record(
     source_commit: str,
     builder: BuilderConfig,
 ) -> None:
+    if spec.package_manager == "npm":
+        primary_image = builder.base_image_nodejs
+    else:
+        primary_image = builder.base_image_python
     catalog.record(
         spec.logical_name,
         CatalogEntry(
@@ -135,7 +178,7 @@ def _record(
             arch=spec.arch,
             region=spec.region,
             builder_version=__version__,
-            base_image_digest=builder.base_image_python.split("@", 1)[-1],
+            base_image_digest=primary_image.split("@", 1)[-1],
             built_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         ),
     )
