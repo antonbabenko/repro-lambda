@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.0 — 2026-05-27
+## v0.2.0 - 2026-05-27
 
 ### Added
 - Node.js Lambda packaging (`nodejs20.x`, `nodejs22.x`) via `npm ci --omit=dev --ignore-scripts --cpu=${arch} --os=linux` in the digest-pinned Node base image.
@@ -34,7 +34,7 @@
 - Per-arch lockfiles remain Python-only.
 - Windows host: the `--user` flag is skipped; Docker Desktop's default user mapping applies.
 
-## v0.1.0 — 2026-05-27
+## v0.1.0 - 2026-05-27
 
 Initial public release.
 
