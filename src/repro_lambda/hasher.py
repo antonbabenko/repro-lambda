@@ -22,12 +22,20 @@ def compute_content_hash(
     spec: LambdaSpec,
     base_image: str,
     builder_version: str,
+    *,
+    extra_files: list[tuple[Path, str]] | None = None,
 ) -> str:
     """
     sha256 over: sorted (relative-path, sha256(content)) tuples for the staged tree
-    + sha256(requirements_lock) + spec scalars + base_image + builder_version.
+    + sha256(requirements_lock) + spec scalars + base_image + builder_version
+    + optional extra_files keyed by destination relname (e.g. "package.json").
 
     Inputs are concatenated with newline separators in a fixed order, then hashed.
+
+    extra_files is a list of (host_path, dest_relname) pairs. The hash covers
+    (dest_relname, file_bytes) only - not the host path - so the hash is
+    host-path-independent. Callers with no extras produce byte-identical hashes
+    to v0.1 (the extras section is omitted entirely when extra_files is falsy).
     """
     h = hashlib.sha256()
 
@@ -52,5 +60,16 @@ def compute_content_hash(
     h.update(f"hash_extra={spec.hash_extra}\n".encode())
     h.update(f"base_image={base_image}\n".encode())
     h.update(f"builder_version={builder_version}\n".encode())
+
+    if extra_files:
+        h.update(b"---extras---\n")
+        # Sort by relname so staging order does not perturb the hash.
+        # Key by relname (destination), not host path - this matches the
+        # staging contract in source_stager.stage_source(extra_files=...).
+        for src, relname in sorted(extra_files, key=lambda pair: pair[1]):
+            h.update(relname.encode("utf-8"))
+            h.update(b"\x00")
+            h.update(_sha256_file(src).encode("ascii"))
+            h.update(b"\n")
 
     return h.hexdigest()
