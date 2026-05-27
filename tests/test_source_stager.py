@@ -93,3 +93,31 @@ def test_stage_source_preserves_executable_bit(git_repo: Path, tmp_path: Path):
     staged = stage_dir / "source" / "tool.py"
     assert staged.exists()
     assert staged.stat().st_mode & 0o111, "executable bit not preserved"
+
+
+def test_stage_source_writes_extra_files_at_stage_root(git_repo: Path, tmp_path: Path):
+    builder = BuilderConfig(
+        base_image_python="x@sha256:0", include_patterns=["**/*.py"], exclude_patterns=[]
+    )
+    stage_dir = tmp_path / "stage"
+
+    extra = tmp_path / "outside"
+    extra.mkdir()
+    (extra / "package.json").write_text('{"name": "x"}')
+    (extra / "package-lock.json").write_text('{"lockfileVersion": 3}')
+
+    stage_source(
+        repo_root=git_repo,
+        source_dir="handler",
+        builder=builder,
+        stage_dir=stage_dir,
+        extra_files=[
+            (extra / "package.json", "package.json"),
+            (extra / "package-lock.json", "package-lock.json"),
+        ],
+    )
+
+    assert (stage_dir / "package.json").read_text() == '{"name": "x"}'
+    assert (stage_dir / "package-lock.json").read_text() == '{"lockfileVersion": 3}'
+    # Existing behavior: source/ subtree still respected
+    assert (stage_dir / "source" / "app.py").exists()

@@ -42,9 +42,15 @@ def stage_source(
     source_dir: str,
     builder: BuilderConfig,
     stage_dir: Path,
+    *,
+    extra_files: list[tuple[Path, str]] | None = None,
 ) -> list[str]:
     """
     Copy git-tracked files under source_dir into stage_dir/source/, preserving perms.
+
+    Optionally copy additional files (outside source_dir) directly into stage_dir.
+    Each entry in extra_files is (src_path, rel_name) where rel_name is the
+    destination path relative to stage_dir (not stage_dir/source/).
 
     Returns the sorted list of relative paths (from repo_root) that were staged.
     """
@@ -64,5 +70,12 @@ def stage_source(
         src_mode = src.stat().st_mode
         if src_mode & 0o111:
             dst.chmod(dst.stat().st_mode | 0o111)
+
+    for src_path, rel_name in (extra_files or []):
+        if not src_path.is_file():
+            raise FileNotFoundError(f"extra_files source not found: {src_path}")
+        dest = stage_dir / rel_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(src_path.read_bytes())
 
     return filtered
