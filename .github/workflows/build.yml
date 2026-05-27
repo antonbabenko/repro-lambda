@@ -9,7 +9,7 @@ on:
         description: Path to lambdas.toml in the caller repo.
       repro_lambda_version:
         type: string
-        default: "0.2.0"
+        default: "0.2.1"
         description: Pinned repro-lambda PyPI version.
     secrets:
       aws-dev-role-arn:
@@ -55,9 +55,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
 
-      - name: Install repro-lambda
-        run: uv pip install --system "repro-lambda==${{ inputs.repro_lambda_version }}"
-
       - name: Configure AWS credentials (dev)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -67,11 +64,11 @@ jobs:
       - name: Build (dev bucket)
         env:
           REPRO_LAMBDA_BUCKET: dev-ctf-lambda-artifacts
-        run: repro-lambda build --manifest "${{ inputs.manifest_path }}"
+        run: uvx --from "repro-lambda==${{ inputs.repro_lambda_version }}" repro-lambda build --manifest "${{ inputs.manifest_path }}"
 
       - name: Verify reproducible (PR only)
         if: github.event_name == 'pull_request'
-        run: repro-lambda build --manifest "${{ inputs.manifest_path }}" --verify --dry-run
+        run: uvx --from "repro-lambda==${{ inputs.repro_lambda_version }}" repro-lambda build --manifest "${{ inputs.manifest_path }}" --verify --dry-run
 
       - name: Configure AWS credentials (prod)
         if: github.ref == 'refs/heads/master' && secrets.aws-prod-role-arn != ''
@@ -84,7 +81,7 @@ jobs:
         if: github.ref == 'refs/heads/master' && secrets.aws-prod-role-arn != ''
         env:
           REPRO_LAMBDA_BUCKET: prod-ctf-lambda-artifacts
-        run: repro-lambda build --manifest "${{ inputs.manifest_path }}"
+        run: uvx --from "repro-lambda==${{ inputs.repro_lambda_version }}" repro-lambda build --manifest "${{ inputs.manifest_path }}"
 
       - name: Commit catalog drift (master only, dev bot)
         if: github.ref == 'refs/heads/master'

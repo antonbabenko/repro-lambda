@@ -260,10 +260,10 @@ on:
 
 jobs:
   build:
-    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0.1.0
+    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0.2.1
     with:
       manifest_path: lambdas.toml
-      repro_lambda_version: "0.1.0"
+      repro_lambda_version: "0.2.1"
     secrets:
       aws-dev-role-arn: ${{ secrets.AWS_DEV_ROLE_ARN }}
       aws-prod-role-arn: ${{ secrets.AWS_PROD_ROLE_ARN }}

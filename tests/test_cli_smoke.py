@@ -8,7 +8,7 @@ runner = CliRunner()
 def test_cli_version_shows_package_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.2.0" in result.stdout
+    assert "0.2.1" in result.stdout
 
 
 def test_cli_build_subcommand_exists():

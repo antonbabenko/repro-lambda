@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.1 - 2026-05-27
+
+### Changed
+- CI workflow: `uvx --from "repro-lambda==<v>" repro-lambda <args>` replaces `uv pip install --system "repro-lambda==<v>"`. uv 0.11+ deprecates the `uv pip` legacy interface for install/uninstall/sync.
+
+### Docs
+- README install instruction switches to `uv tool install repro-lambda` (plus `uvx repro-lambda` ephemeral alternative).
+- SETUP.md examples bumped to `@v0.2.1` / `repro_lambda_version: "0.2.1"`.
+
+### Consumer migration
+- Consumer repos must bump their workflow ref to `uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0.2.1` to receive the uvx-based install. The v0.2.0 workflow ref still works but invokes the deprecated install command.
+
 ## v0.2.0 - 2026-05-27
 
 ### Added
