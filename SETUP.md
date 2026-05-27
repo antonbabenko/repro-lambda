@@ -367,3 +367,116 @@ attributes (`source_path`, `build_in_docker`, `trigger_on_package_timestamp`,
   removed every legacy attribute and that the catalog sha read by `jsondecode`
   matches the sha in the S3 key. The plan diff should be exactly `~ s3_key =
   "<old>.zip" -> "<new>.zip"` and nothing else.
+
+## Node.js (npm) Lambdas
+
+`repro-lambda` v0.2 adds Node.js Lambda packaging. The build runs `npm ci` in
+the digest-pinned Node base image, then packs the resulting `pkg/` directory
+inside the digest-pinned Python base image (Python is the only language with
+deterministic-zip tooling pre-installed in the AWS Lambda runtime images, so
+its zlib is the only deflate implementation invoked - macOS arm64 hosts and
+Linux x86_64 CI produce byte-identical output).
+
+### Manifest fields for npm specs
+
+```toml
+[[lambda]]
+logical_name      = "api"
+source_dir        = "src/api"
+requirements_lock = "src/api/package-lock.json"   # npm lockfile
+package_json      = "src/api/package.json"        # REQUIRED for npm specs
+runtime           = "nodejs22.x"                  # or "nodejs20.x"
+arch              = "x86_64"                      # or "arm64"
+handler           = "index.handler"
+region            = "eu-west-1"
+package_manager   = "npm"
+lambda_at_edge    = false
+hash_extra        = ""
+
+[builder]
+base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:<pinned-digest>"
+base_image_nodejs = "public.ecr.aws/lambda/nodejs:22@sha256:<pinned-digest>"
+include_patterns  = ["**/*.js", "**/*.json"]
+exclude_patterns  = [".git/**", "node_modules/**", "*.md", "LICENSE*", "CHANGELOG*"]
+```
+
+Pin both base images by digest:
+
+```bash
+docker pull public.ecr.aws/lambda/nodejs:22
+docker inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/lambda/nodejs:22
+```
+
+### Lockfile regeneration
+
+`repro-lambda lock` only regenerates per-arch Python lockfiles via `uv pip
+compile`. For npm specs it prints `skip <name>: npm uses package-lock.json
+directly`. Regenerate the npm lockfile upstream with:
+
+```bash
+cd src/api
+npm install --package-lock-only
+git add package-lock.json
+```
+
+The lockfile and `package.json` both contribute to the artifact content hash;
+editing either bumps the S3 key.
+
+## Lambda@Edge example
+
+Lambda@Edge functions must be deployed to `us-east-1`, regardless of where the
+CloudFront distribution serves traffic. Set `region = "us-east-1"` and
+`lambda_at_edge = true` in the manifest; `repro-lambda` will upload to the
+`*-us-east-1` artifact bucket automatically.
+
+```toml
+[[lambda]]
+logical_name      = "edge"
+source_dir        = "src/edge"
+requirements_lock = "src/edge/package-lock.json"
+package_json      = "src/edge/package.json"
+runtime           = "nodejs22.x"
+arch              = "x86_64"               # L@E currently requires x86_64
+handler           = "index.handler"
+region            = "us-east-1"
+package_manager   = "npm"
+lambda_at_edge    = true
+```
+
+Consumer Terraform points at the us-east-1 bucket:
+
+```hcl
+module "lambda_edge" {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "~> 8.0"
+  providers = { aws = aws.us_east_1 }
+
+  function_name  = "my-edge"
+  runtime        = "nodejs22.x"
+  architectures  = ["x86_64"]
+  handler        = "index.handler"
+  publish        = true
+  lambda_at_edge = true
+
+  s3_existing_package = {
+    bucket = "${var.env}-my-lambda-artifacts-us-east-1"
+    key    = "lambdas/edge/${local.lambda_manifest.lambdas.edge.current}.zip"
+  }
+}
+```
+
+## Caveats
+
+- **No npm workspaces.** v0.2 supports a single `package.json` per Lambda. If
+  your repo uses workspaces, copy the published package into a single-package
+  layout per Lambda before invoking `repro-lambda`.
+- **Native dependencies need `optionalDependencies` arms.** `npm ci --cpu=${arch}
+  --os=linux` cannot cross-compile native modules. A dep with native code must
+  ship a `linux-${arch}` binary via its `package-lock.json`
+  `optionalDependencies` arm (the lockfile-v3 standard mechanism). If it
+  doesn't, the build runs on the host arch and may produce a non-portable
+  artifact.
+- **Symlinks in source are skipped.** `pack_directory` skips symlinks and
+  prints a stderr warning; the resulting zip cannot preserve link semantics.
+  If your build relies on symlinks (e.g. monorepo references), replace them
+  with the file contents.
