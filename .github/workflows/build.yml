@@ -1,0 +1,98 @@
+name: build-lambdas (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      manifest_path:
+        type: string
+        default: lambdas.toml
+        description: Path to lambdas.toml in the caller repo.
+      repro_lambda_version:
+        type: string
+        default: "0.1.0"
+        description: Pinned repro-lambda PyPI version.
+    secrets:
+      aws-dev-role-arn:
+        required: true
+      aws-prod-role-arn:
+        required: false
+
+jobs:
+  detect-arches:
+    runs-on: ubuntu-24.04
+    outputs:
+      arches: ${{ steps.parse.outputs.arches }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - id: parse
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import json, os, sys
+          try:
+              import tomllib
+          except ImportError:
+              import tomli as tomllib
+          with open("${{ inputs.manifest_path }}", "rb") as f:
+              data = tomllib.load(f)
+          arches = sorted({l["arch"] for l in data.get("lambda", [])})
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"arches={json.dumps(arches)}\n")
+          PY
+
+  build:
+    needs: detect-arches
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.detect-arches.outputs.arches) }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install repro-lambda
+        run: uv pip install --system "repro-lambda==${{ inputs.repro_lambda_version }}"
+
+      - name: Configure AWS credentials (dev)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws-dev-role-arn }}
+          aws-region: eu-west-1
+
+      - name: Build (dev bucket)
+        env:
+          REPRO_LAMBDA_BUCKET: dev-ctf-lambda-artifacts
+        run: repro-lambda build --manifest "${{ inputs.manifest_path }}"
+
+      - name: Verify reproducible (PR only)
+        if: github.event_name == 'pull_request'
+        run: repro-lambda build --manifest "${{ inputs.manifest_path }}" --verify --dry-run
+
+      - name: Configure AWS credentials (prod)
+        if: github.ref == 'refs/heads/master' && secrets.aws-prod-role-arn != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws-prod-role-arn }}
+          aws-region: eu-west-1
+
+      - name: Build (prod bucket)
+        if: github.ref == 'refs/heads/master' && secrets.aws-prod-role-arn != ''
+        env:
+          REPRO_LAMBDA_BUCKET: prod-ctf-lambda-artifacts
+        run: repro-lambda build --manifest "${{ inputs.manifest_path }}"
+
+      - name: Commit catalog drift (master only, dev bot)
+        if: github.ref == 'refs/heads/master'
+        run: |
+          if [[ -n "$(git status --porcelain builds/catalog.json)" ]]; then
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git add builds/catalog.json
+            git commit -m "chore(catalog): auto-update after build [skip ci]"
+            git push
+          fi
