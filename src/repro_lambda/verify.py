@@ -6,7 +6,7 @@ import hashlib
 import tempfile
 from pathlib import Path
 
-from repro_lambda.docker_runner import build_python_lambda
+from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
 from repro_lambda.manifest import BuilderConfig, LambdaSpec
 from repro_lambda.source_stager import stage_source
 
@@ -23,6 +23,17 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _extras_for(spec: LambdaSpec, lock_path: Path, repo_root: Path) -> list[tuple[Path, str]]:
+    if spec.package_manager == "pip":
+        return [(lock_path, "requirements.lock")]
+    if spec.package_manager == "npm":
+        return [
+            (repo_root / spec.package_json_resolved, "package.json"),
+            (lock_path, "package-lock.json"),
+        ]
+    raise ValueError(f"unsupported package_manager {spec.package_manager!r}")
+
+
 def verify_reproducible(
     *,
     repo_root: Path,
@@ -34,6 +45,9 @@ def verify_reproducible(
 
     Returns (sha_build_1, sha_build_2) on match. Raises ReproducibilityError on mismatch.
     """
+    lock_path = repo_root / spec.resolved_requirements_lock
+    extras = _extras_for(spec, lock_path, repo_root)
+
     shas: list[str] = []
     for _ in range(2):
         with tempfile.TemporaryDirectory(prefix="repro-verify-") as td:
@@ -43,17 +57,27 @@ def verify_reproducible(
                 source_dir=spec.source_dir,
                 builder=builder,
                 stage_dir=stage_dir,
+                extra_files=extras,
             )
-            lock_path = repo_root / spec.resolved_requirements_lock
-            (stage_dir / "requirements.lock").write_bytes(lock_path.read_bytes())
             out_zip = stage_dir / "lambda.zip"
-            build_python_lambda(
-                stage_dir=stage_dir,
-                out_zip=out_zip,
-                base_image=builder.base_image_python,
-                arch=spec.arch,
-                python_version=spec.runtime.removeprefix("python"),
-            )
+            if spec.package_manager == "pip":
+                build_python_lambda(
+                    stage_dir=stage_dir,
+                    out_zip=out_zip,
+                    base_image=builder.base_image_python,
+                    arch=spec.arch,
+                    python_version=spec.runtime.removeprefix("python"),
+                )
+            else:  # npm
+                node_ver = spec.runtime.removeprefix("nodejs").removesuffix(".x")
+                build_nodejs_lambda(
+                    stage_dir=stage_dir,
+                    out_zip=out_zip,
+                    base_image_nodejs=builder.base_image_nodejs,
+                    base_image_python=builder.base_image_python,
+                    arch=spec.arch,
+                    node_version=node_ver,
+                )
             shas.append(_sha256(out_zip))
 
     if shas[0] != shas[1]:
