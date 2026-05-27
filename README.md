@@ -19,3 +19,18 @@ instead of building during `terraform plan`/`apply`.
     repro-lambda build --verify # two-pass byte-reproducibility check
 
 See `docs/` for full design.
+
+## Release
+
+Releases are tag-driven. To cut v0.1.1:
+
+    git tag v0.1.1
+    git push origin v0.1.1
+
+The `publish.yml` workflow uses PyPI Trusted Publishing (OIDC) — no PyPI token
+needed in repo secrets. Configure once via PyPI's "Publishing" panel:
+
+- Owner: `antonbabenko`
+- Repository: `repro-lambda`
+- Workflow: `publish.yml`
+- Environment: (leave blank)
