@@ -220,11 +220,24 @@ def init() -> None:
     raise typer.Exit(0)
 
 
+# Stripped from every lambda zip so the container build needs no findutils/xargs
+# (absent from minimal Lambda base images): Python caches and the non-deterministic
+# dist-info metadata files pip writes (RECORD, INSTALLER, direct_url.json, REQUESTED).
+_LAMBDA_ZIP_EXCLUDES = [
+    "*__pycache__*",
+    "*.pyc",
+    "*.dist-info/RECORD",
+    "*.dist-info/INSTALLER",
+    "*.dist-info/direct_url.json",
+    "*.dist-info/REQUESTED",
+]
+
+
 def _zip_impl(src: Path, out: Path) -> None:
     """Pack a directory into a deterministic zip (used inside container)."""
     from repro_lambda.zip_packager import pack_directory
 
-    pack_directory(src, out)
+    pack_directory(src, out, exclude_glob=_LAMBDA_ZIP_EXCLUDES)
 
 
 @app.command(name="zip")

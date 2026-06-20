@@ -50,15 +50,9 @@ pip install \
   --target "$PKG" \
   --requirement /src/requirements.lock
 
-# v0.1 byte-output cleanup: strip non-deterministic install metadata + caches.
-find "$PKG" -type d -name "__pycache__" -prune -exec sh -c 'for d; do rm -rf -- "$d"; done' _ {} +
-find "$PKG" -type f -name "*.pyc" -delete
-find "$PKG" -type d -name "*.dist-info" -exec sh -c '
-  for d; do
-    rm -f -- "$d/RECORD" "$d/INSTALLER" "$d/direct_url.json" "$d/REQUESTED"
-  done
-' _ {} +
-
+# Byte-output cleanup (caches + non-deterministic dist-info metadata) happens in the
+# Python zip step below, so this script needs no findutils/xargs (both absent from the
+# minimal AWS Lambda base images).
 python3 -m repro_lambda zip --src "$PKG" --out /out/lambda.zip
 """
 

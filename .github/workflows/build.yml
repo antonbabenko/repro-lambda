@@ -9,7 +9,7 @@ on:
         description: Path to lambdas.toml in the caller repo.
       repro_lambda_version:
         type: string
-        default: "0.2.3"
+        default: "0.2.4"
         description: Pinned repro-lambda PyPI version.
       aws-dev-role-arn:
         type: string

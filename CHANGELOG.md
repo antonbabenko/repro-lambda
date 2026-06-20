@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.4 - 2026-06-20
+
+### Fixed
+- Container build no longer shells out to `find`/`xargs` (both absent from the minimal AWS Lambda base images, which caused `find: command not found`). The post-install cleanup (Python caches + non-deterministic `*.dist-info` metadata: RECORD, INSTALLER, direct_url.json, REQUESTED) now happens in the Python zip step via exclude globs, producing the same artifact bytes.
+
 ## v0.2.3 - 2026-06-20
 
 ### Fixed
