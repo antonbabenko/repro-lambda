@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.3 - 2026-06-20
+
+### Fixed
+- Python build container staged dependencies under `/build` (root-owned), which failed with `mkdir: Permission denied` when the container runs as a non-root `--user` (e.g. GitHub-hosted runners, uid 1001). Staging moved to `/tmp/build` (world-writable).
+
+### Added
+- `build --arch <arm64|x86_64>` filters the manifest to lambdas of that arch, so a per-arch CI matrix builds each arch natively on its own runner. This avoids cross-arch `docker run` (which fails without emulation, and emulated builds would break byte-reproducibility). The reusable `build.yml` passes `--arch ${{ matrix.arch }}`.
+
 ## v0.2.2 - 2026-06-20
 
 ### Changed

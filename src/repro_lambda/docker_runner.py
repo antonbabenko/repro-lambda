@@ -37,7 +37,7 @@ class DockerRunError(RuntimeError):
 
 _PYTHON_INSTALL_SCRIPT = r"""
 set -euxo pipefail
-PKG=/build/pkg
+PKG=/tmp/build/pkg
 mkdir -p "$PKG"
 cp -R /src/source/. "$PKG/"
 

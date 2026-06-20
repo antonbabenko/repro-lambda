@@ -109,3 +109,23 @@ def test_cli_build_allow_dirty_bypasses_guard(consumer_repo: Path, mocker):
         ],
     )
     assert result.exit_code == 0, result.stdout
+
+
+def test_cli_build_arch_filter_skips_nonmatching(consumer_repo: Path, mocker):
+    mock_docker = mocker.patch("repro_lambda.build.build_python_lambda")
+    result = runner.invoke(
+        app,
+        [
+            "build",
+            "app",
+            "--manifest",
+            str(consumer_repo / "lambdas.toml"),
+            "--arch",
+            "x86_64",
+            "--dry-run",
+        ],
+    )
+    # consumer_repo's only lambda 'app' is arm64; an x86_64 filter -> nothing to build.
+    assert result.exit_code == 0, result.stdout
+    assert "nothing to build" in result.stdout
+    mock_docker.assert_not_called()

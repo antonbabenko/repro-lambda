@@ -1,5 +1,6 @@
 from typer.testing import CliRunner
 
+from repro_lambda import __version__
 from repro_lambda.cli import app
 
 runner = CliRunner()
@@ -8,7 +9,7 @@ runner = CliRunner()
 def test_cli_version_shows_package_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.2.1" in result.stdout
+    assert __version__ in result.stdout
 
 
 def test_cli_build_subcommand_exists():

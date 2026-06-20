@@ -63,6 +63,12 @@ def build(
     verify: Annotated[bool, typer.Option("--verify")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     allow_dirty: Annotated[bool, typer.Option("--allow-dirty")] = False,
+    arch: Annotated[
+        str,
+        typer.Option(
+            "--arch", help="Only build lambdas with this arch (e.g. arm64, x86_64). Empty = all."
+        ),
+    ] = "",
 ) -> None:
     """Build one lambda (or all) per manifest and upload to S3."""
     import json
@@ -83,6 +89,12 @@ def build(
     if not selected:
         typer.echo(f"no lambda named {target!r} in {manifest}", err=True)
         raise typer.Exit(2)
+
+    if arch:
+        selected = [s for s in selected if s.arch == arch]
+        if not selected:
+            typer.echo(f"no lambdas with arch {arch!r} in {manifest}; nothing to build")
+            raise typer.Exit(0)
 
     if not dry_run and not bucket:
         typer.echo(
