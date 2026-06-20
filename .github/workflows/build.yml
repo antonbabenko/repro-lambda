@@ -33,7 +33,7 @@ jobs:
       arches: ${{ steps.parse.outputs.arches }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
       - id: parse
         shell: bash
         run: |
@@ -62,7 +62,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Configure AWS credentials (dev)
         uses: aws-actions/configure-aws-credentials@v6
