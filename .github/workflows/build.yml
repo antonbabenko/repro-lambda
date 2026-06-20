@@ -7,24 +7,20 @@ on:
         type: string
         default: lambdas.toml
         description: Path to lambdas.toml in the caller repo.
-      repro_lambda_version:
-        type: string
-        default: "0.2.4"
-        description: Pinned repro-lambda PyPI version.
-      aws-dev-role-arn:
+      aws_dev_role_arn:
         type: string
         required: true
         description: ARN of the dev OIDC role assumed for artifact upload. Not a secret (the security boundary is the OIDC trust policy + bucket immutability), so callers pass it as a plain input.
-      aws-prod-role-arn:
+      aws_prod_role_arn:
         type: string
         required: false
         default: ""
         description: ARN of the prod OIDC role (master push only). Empty string disables the prod upload steps.
-      dev-bucket:
+      dev_bucket:
         type: string
         required: true
         description: S3 bucket name for dev Lambda artifacts (set as REPRO_LAMBDA_BUCKET on the dev upload). Caller-supplied so the reusable workflow stays consumer-agnostic.
-      prod-bucket:
+      prod_bucket:
         type: string
         required: false
         default: ""
@@ -36,8 +32,8 @@ jobs:
     outputs:
       arches: ${{ steps.parse.outputs.arches }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
       - id: parse
         shell: bash
         run: |
@@ -65,36 +61,36 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
 
       - name: Configure AWS credentials (dev)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.aws-dev-role-arn }}
+          role-to-assume: ${{ inputs.aws_dev_role_arn }}
           aws-region: eu-west-1
 
       - name: Build (dev bucket)
         env:
-          REPRO_LAMBDA_BUCKET: ${{ inputs.dev-bucket }}
-        run: uvx --from "repro-lambda==${{ inputs.repro_lambda_version }}" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
+          REPRO_LAMBDA_BUCKET: ${{ inputs.dev_bucket }}
+        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
 
       - name: Verify reproducible (PR only)
         if: github.event_name == 'pull_request'
-        run: uvx --from "repro-lambda==${{ inputs.repro_lambda_version }}" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --verify --dry-run
+        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --verify --dry-run
 
       - name: Configure AWS credentials (prod)
-        if: github.ref == 'refs/heads/master' && inputs.aws-prod-role-arn != ''
-        uses: aws-actions/configure-aws-credentials@v4
+        if: github.ref == 'refs/heads/master' && inputs.aws_prod_role_arn != ''
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.aws-prod-role-arn }}
+          role-to-assume: ${{ inputs.aws_prod_role_arn }}
           aws-region: eu-west-1
 
       - name: Build (prod bucket)
-        if: github.ref == 'refs/heads/master' && inputs.aws-prod-role-arn != ''
+        if: github.ref == 'refs/heads/master' && inputs.aws_prod_role_arn != ''
         env:
-          REPRO_LAMBDA_BUCKET: ${{ inputs.prod-bucket }}
-        run: uvx --from "repro-lambda==${{ inputs.repro_lambda_version }}" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
+          REPRO_LAMBDA_BUCKET: ${{ inputs.prod_bucket }}
+        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
 
       - name: Commit catalog drift (master only, dev bot)
         if: github.ref == 'refs/heads/master'

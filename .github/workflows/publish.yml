@@ -2,7 +2,9 @@ name: publish
 
 on:
   push:
-    tags: ["v*"]
+    # Full semver tags only (vX.Y.Z) trigger a PyPI release. The sliding major
+    # tag (v1), which consumer workflows pin via @v1, must NOT trigger publish.
+    tags: ["v*.*.*"]
 
 jobs:
   build-and-publish:
@@ -11,8 +13,8 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
       - run: uv sync --all-extras
 
       - name: Verify tag matches package version
