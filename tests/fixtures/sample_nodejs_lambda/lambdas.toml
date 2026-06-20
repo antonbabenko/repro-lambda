@@ -1,0 +1,18 @@
+[[lambda]]
+logical_name      = "edge"
+source_dir        = "handler"
+requirements_lock = "handler/package-lock.json"
+package_json      = "handler/package.json"
+runtime           = "nodejs22.x"
+arch              = "x86_64"
+handler           = "index.handler"
+region            = "us-east-1"
+package_manager   = "npm"
+lambda_at_edge    = true
+hash_extra        = ""
+
+[builder]
+base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+base_image_nodejs = "public.ecr.aws/lambda/nodejs:22@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+include_patterns  = ["**/*.js", "**/*.json"]
+exclude_patterns  = [".git/**", "node_modules/**", "*.md", "LICENSE*", "CHANGELOG*"]

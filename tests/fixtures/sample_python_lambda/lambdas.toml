@@ -1,0 +1,16 @@
+[[lambda]]
+logical_name      = "app"
+source_dir        = "handler"
+requirements_lock = "handler/requirements.${arch}.lock"
+runtime           = "python3.13"
+arch              = "arm64"
+handler           = "app.lambda_handler"
+region            = "eu-west-1"
+package_manager   = "pip"
+lambda_at_edge    = false
+hash_extra        = ""
+
+[builder]
+base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+include_patterns  = ["**/*.py", "**/*.json"]
+exclude_patterns  = [".venv/**", "__pycache__/**", "*.pyc", ".git/**"]
