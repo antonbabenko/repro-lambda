@@ -70,6 +70,13 @@ def build(
             "--arch", help="Only build lambdas with this arch (e.g. arm64, x86_64). Empty = all."
         ),
     ] = "",
+    json_out: Annotated[
+        Path | None,
+        typer.Option(
+            "--json-out",
+            help="Also write the build summary JSON array to this file (for CI Step Summary).",
+        ),
+    ] = None,
 ) -> None:
     """Build one lambda (or all) per manifest and upload to S3."""
     import json
@@ -170,6 +177,9 @@ def build(
     if not dry_run:
         catalog.save(catalog_path)
 
+    if json_out is not None:
+        json_out.write_text(json.dumps(summary, indent=2))
+
     typer.echo(json.dumps(summary, indent=2))
 
 
@@ -196,14 +206,25 @@ def promote(
             help="Destination (prod) base bucket; us-east-1 variant auto-derived.",
         ),
     ] = "",
+    sha: Annotated[
+        str,
+        typer.Option(
+            "--sha",
+            help="Promote this exact 64-hex content sha instead of the catalog's current. "
+            "Requires a single lambda target (not 'all').",
+        ),
+    ] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
 ) -> None:
     """Copy built artifacts dev -> prod by content hash (no rebuild).
 
-    The sha per lambda is read from builds/catalog.json, so the artifact promoted
-    is exactly the one the source commit built and tested in dev.
+    By default the sha per lambda is read from builds/catalog.json, so the artifact
+    promoted is exactly the one the source commit built and tested in dev. Pass
+    ``--sha`` to promote one explicit content sha (e.g. copy-pasted from a build run's
+    Step Summary), bypassing the catalog.
     """
     import json
+    import re
 
     from repro_lambda.manifest import load_manifest
     from repro_lambda.promote import (
@@ -225,6 +246,14 @@ def promote(
         typer.echo(f"no lambda named {target!r} in {manifest}", err=True)
         raise typer.Exit(2)
 
+    if sha:
+        if target == "all" or len(selected) != 1:
+            typer.echo("--sha requires a single lambda target (not 'all')", err=True)
+            raise typer.Exit(2)
+        if not re.fullmatch(r"[a-f0-9]{64}", sha):
+            typer.echo(f"--sha must be 64 lowercase hex chars, got {sha!r}", err=True)
+            raise typer.Exit(2)
+
     if not dry_run and (not dev_bucket or not prod_bucket):
         typer.echo(
             "--dev-bucket and --prod-bucket (or REPRO_LAMBDA_DEV_BUCKET / "
@@ -237,10 +266,10 @@ def promote(
     summary = []
     for spec in selected:
         try:
-            sha = sha_from_catalog(catalog_path, spec.logical_name)
+            resolved_sha = sha or sha_from_catalog(catalog_path, spec.logical_name)
             outcome = promote_one(
                 spec=spec,
-                sha=sha,
+                sha=resolved_sha,
                 dev_bucket=dev_bucket,
                 prod_bucket=prod_bucket,
                 dry_run=dry_run,
