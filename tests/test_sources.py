@@ -162,6 +162,13 @@ def test_authorization_kept_on_same_host_redirect(fake_https):
     assert fake_https.calls[1].sent_headers["Authorization"] == "Bearer SECRET"
 
 
+def test_user_agent_header_is_sent(fake_https):
+    # GitHub's REST API 403s requests with no User-Agent; we must always send one.
+    fake_https.responses = [_FakeResp(200, body=b"X")]
+    sources._http_request("https://api.github.com/x", {}, io.BytesIO(), 1 << 20)
+    assert fake_https.calls[0].sent_headers.get("User-Agent", "").startswith("repro-lambda/")
+
+
 def test_non_https_refused():
     with pytest.raises(SourceSecurityError, match="non-https"):
         sources._http_request("http://x.example/a", {}, io.BytesIO(), 1 << 20)
