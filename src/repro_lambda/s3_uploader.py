@@ -28,6 +28,25 @@ class S3Uploader:
                 return False
             raise
 
+    def copy(self, *, src_bucket: str, dst_bucket: str, key: str) -> UploadResult:
+        """
+        Server-side copy of the same key from src_bucket to dst_bucket.
+
+        Idempotent via a destination existence pre-check; safe because artifact
+        buckets are content-addressed and immutable (the same key never changes
+        bytes). Returns ALREADY_PRESENT if the destination key already exists,
+        UPLOADED otherwise.
+        """
+        if self.exists(bucket=dst_bucket, key=key):
+            return UploadResult.ALREADY_PRESENT
+        self._client.copy_object(
+            Bucket=dst_bucket,
+            Key=key,
+            CopySource={"Bucket": src_bucket, "Key": key},
+            ServerSideEncryption="AES256",
+        )
+        return UploadResult.UPLOADED
+
     def upload(self, *, bucket: str, key: str, body_path: Path) -> UploadResult:
         """
         PutObject with If-None-Match=*.

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.0 - 2026-06-21
+
+### Added
+- `promote` command: copy an already-built artifact from the dev bucket to the prod bucket by content hash, with no rebuild. The sha per lambda is read from `builds/catalog.json`, so the promoted object is byte-for-byte the one built and tested in dev. Idempotent (skips keys already present); Lambda@Edge specs resolve to the `-us-east-1` bucket variant on both sides. `S3Uploader.copy()` performs the server-side `CopyObject`.
+- Reusable workflow `promote.yml`: validates `source_sha` (40-char hex + master-lineage), checks it out, assumes a caller-supplied promoter role, and runs `promote`. Inputs: `manifest_path`, `source_sha`, `promoter_role_arn`, `dev_bucket`, `prod_bucket`.
+
+### Consumer migration
+- Replace a rebuild-on-prod `promote-to-prod` job with a call to the reusable workflow:
+
+      jobs:
+        promote:
+          uses: antonbabenko/repro-lambda/.github/workflows/promote.yml@v1
+          with:
+            source_sha: ${{ inputs.source_sha }}
+            promoter_role_arn: arn:aws:iam::<account>:role/<promoter-role>
+            dev_bucket: <env>-my-lambda-artifacts
+            prod_bucket: <env>-my-lambda-artifacts
+
 ## v0.2.4 - 2026-06-20
 
 ### Fixed

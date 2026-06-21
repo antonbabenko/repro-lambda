@@ -1,0 +1,75 @@
+name: promote-lambdas (reusable)
+
+# Promote already-built dev artifacts to prod by content-addressed S3 copy.
+# No rebuild: the exact lambdas/<name>/<sha>.zip tested in dev is copied to the
+# prod bucket, so a cross-architecture prod runner can never diverge from dev.
+on:
+  workflow_call:
+    inputs:
+      manifest_path:
+        type: string
+        default: lambdas.toml
+        description: Path to lambdas.toml in the caller repo.
+      source_sha:
+        type: string
+        required: true
+        description: 40-char hex commit on the caller's master that produced the dev artifacts. Validated and checked out before reading the manifest/catalog.
+      promoter_role_arn:
+        type: string
+        required: true
+        description: ARN of the prod OIDC role assumed for the cross-account dev-read + prod-write copy. Not a secret (the boundary is the OIDC trust policy + bucket immutability).
+      dev_bucket:
+        type: string
+        required: true
+        description: Source (dev) base S3 bucket; us-east-1 variant auto-derived for Lambda@Edge.
+      prod_bucket:
+        type: string
+        required: true
+        description: Destination (prod) base S3 bucket; us-east-1 variant auto-derived for Lambda@Edge.
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      # Validate source_sha BEFORE checkout to defend against script injection
+      # via the inputs.source_sha expression (passed through env: + bash regex).
+      - name: Validate source_sha shape (40-char hex)
+        run: |
+          if ! [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "::error::source_sha must be 40-char lowercase hex; got '$SOURCE_SHA'"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Validate source_sha is reachable from origin/master
+        run: |
+          git fetch origin master
+          if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/master; then
+            echo "::error::source_sha=$SOURCE_SHA not on master lineage"
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Configure AWS credentials (prod promoter)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ inputs.promoter_role_arn }}
+          aws-region: eu-west-1
+
+      - name: Promote dev -> prod (content-addressed copy)
+        env:
+          REPRO_LAMBDA_DEV_BUCKET: ${{ inputs.dev_bucket }}
+          REPRO_LAMBDA_PROD_BUCKET: ${{ inputs.prod_bucket }}
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+        run: uvx --from repro-lambda repro-lambda promote --manifest "$MANIFEST_PATH"

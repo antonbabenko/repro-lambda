@@ -170,6 +170,95 @@ def build(
 
 
 @app.command()
+def promote(
+    target: Annotated[str, typer.Argument(help="Lambda logical_name or 'all'.")] = "all",
+    manifest: Annotated[
+        Path,
+        typer.Option("--manifest", "-m", help="Path to lambdas.toml."),
+    ] = Path("lambdas.toml"),
+    dev_bucket: Annotated[
+        str,
+        typer.Option(
+            "--dev-bucket",
+            envvar="REPRO_LAMBDA_DEV_BUCKET",
+            help="Source (dev) base bucket; us-east-1 variant auto-derived.",
+        ),
+    ] = "",
+    prod_bucket: Annotated[
+        str,
+        typer.Option(
+            "--prod-bucket",
+            envvar="REPRO_LAMBDA_PROD_BUCKET",
+            help="Destination (prod) base bucket; us-east-1 variant auto-derived.",
+        ),
+    ] = "",
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Copy built artifacts dev -> prod by content hash (no rebuild).
+
+    The sha per lambda is read from builds/catalog.json, so the artifact promoted
+    is exactly the one the source commit built and tested in dev.
+    """
+    import json
+
+    from repro_lambda.manifest import load_manifest
+    from repro_lambda.promote import (
+        MissingSourceArtifactError,
+        UnknownShaError,
+        promote_one,
+        sha_from_catalog,
+    )
+
+    repo_root = manifest.parent.resolve()
+    parsed = load_manifest(manifest)
+
+    selected = (
+        parsed.lambdas
+        if target == "all"
+        else [s for s in parsed.lambdas if s.logical_name == target]
+    )
+    if not selected:
+        typer.echo(f"no lambda named {target!r} in {manifest}", err=True)
+        raise typer.Exit(2)
+
+    if not dry_run and (not dev_bucket or not prod_bucket):
+        typer.echo(
+            "--dev-bucket and --prod-bucket (or REPRO_LAMBDA_DEV_BUCKET / "
+            "REPRO_LAMBDA_PROD_BUCKET) are required for non-dry-run",
+            err=True,
+        )
+        raise typer.Exit(2)
+
+    catalog_path = repo_root / "builds" / "catalog.json"
+    summary = []
+    for spec in selected:
+        try:
+            sha = sha_from_catalog(catalog_path, spec.logical_name)
+            outcome = promote_one(
+                spec=spec,
+                sha=sha,
+                dev_bucket=dev_bucket,
+                prod_bucket=prod_bucket,
+                dry_run=dry_run,
+            )
+        except (MissingSourceArtifactError, UnknownShaError) as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1) from e
+        summary.append(
+            {
+                "logical_name": spec.logical_name,
+                "outcome": outcome.outcome.value,
+                "sha256": outcome.sha256,
+                "bucket_key": outcome.bucket_key,
+                "src_bucket": outcome.src_bucket,
+                "dst_bucket": outcome.dst_bucket,
+            }
+        )
+
+    typer.echo(json.dumps(summary, indent=2))
+
+
+@app.command()
 def lock(
     manifest: Annotated[Path, typer.Option("--manifest", "-m")] = Path("lambdas.toml"),
 ) -> None:
