@@ -330,6 +330,82 @@ The resolved per-lambda builder (base-image digest + include/exclude lists +
 builder version) folds into the content hash, so changing an override re-keys
 that lambda's artifact while leaving the others untouched.
 
+## Declarative sources — `[[lambda.source]]`
+
+A lambda can bundle pinned external artifacts (a release tarball, a vendored CLI
+binary) fetched at build time, instead of a hand-rolled download script. Each
+`[[lambda.source]]` is fully pinned and fetched + verified + extracted into the
+package before the container build:
+
+```toml
+[[lambda]]
+logical_name      = "app"
+source_dir        = "src/app"
+requirements_lock = "src/app/requirements.${arch}.lock"
+runtime           = "python3.13"
+arch              = "arm64"
+handler           = "app.lambda_handler"
+
+# A private GitHub release tarball -> staged at package path "vendor".
+[[lambda.source]]
+name    = "vendor"
+type    = "github_release"
+repo    = "owner/vendor-tool"
+tag     = "vendor-v{version}"
+asset   = "vendor-{version}.tar.gz"
+sha256  = "<64-hex; written by `repro-lambda lock`>"
+extract = "tar.gz"
+member  = "vendor-{version}"   # map the versioned top dir to dest
+dest    = "vendor"
+version = "1.4.0"              # bump this one line; lock re-pins everything
+
+# A public binary whose version is derived from the vendor release's .tool-versions.
+[[lambda.source]]
+name    = "terraform"
+type    = "https"
+url     = "https://releases.hashicorp.com/terraform/{version}/terraform_{version}_linux_arm64.zip"
+sha256  = "<64-hex; written by lock>"
+extract = "zip"
+member  = "terraform"
+dest    = "bin/terraform"
+executable = true
+version = "1.9.0"
+[lambda.source.version_from]
+source = "vendor"          # read from the vendor source's extracted tree
+file   = ".tool-versions"  # relative to its member-stripped root
+key    = "terraform"
+```
+
+- **Pinning.** `sha256` is verified before the archive is opened. `extract` is
+  `zip` / `tar.gz` / `none`. `member` extracts one file or a directory subtree to
+  `dest`; omit it to extract the whole archive under `dest`. Source names are
+  unique per lambda and dests may not overlap each other or the staged source.
+- **`version_from`** (single-level) derives a source's `version` from an asdf-style
+  `key value` line in another source's file, so bumping the root `version`
+  cascades to dependents. It is a lock input - it never affects the artifact hash.
+- **`repro-lambda lock`** re-resolves `version_from`, re-downloads, recomputes each
+  `sha256`, and rewrites this file (comment-preserving, atomic, idempotent). Run it
+  after bumping a `version`. Pass `REPRO_LAMBDA_SOURCES_TOKEN` for private
+  `github_release` sources.
+- **Security.** Fetches are HTTPS-only with an SSRF guard (no private/loopback/
+  link-local/metadata IPs), strip `Authorization` on cross-host redirects, verify
+  sha256 before extraction, and reject path-traversal / link / device entries with
+  decompression-bomb bounds. See `src/repro_lambda/sources.py`.
+
+In CI, pass the token to the reusable `build.yml` as the `sources_token` secret:
+
+```yaml
+jobs:
+  build:
+    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0
+    with:
+      manifest_path: lambdas.toml
+      aws_dev_role_arn: arn:aws:iam::<account>:role/<dev-builder-role>
+      dev_bucket: <env>-my-lambda-artifacts
+    secrets:
+      sources_token: ${{ secrets.MY_RELEASE_TOKEN }}
+```
+
 ## Terraform consumer — `s3_existing_package`
 
 In the Terraform that creates your Lambda function, point at the artifact in
