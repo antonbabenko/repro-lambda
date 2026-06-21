@@ -226,3 +226,74 @@ def test_cli_promote_unknown_target_exits_2(tmp_path: Path):
         ],
     )
     assert result.exit_code == 2
+
+
+_EXPLICIT_SHA = "a" * 64  # 64-hex, deliberately NOT the catalog's "cafef00d"
+
+
+def test_cli_promote_explicit_sha_bypasses_catalog(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    with mock_aws():
+        c = boto3.client("s3", region_name="eu-west-1")
+        _make_bucket(c, DEV, "eu-west-1")
+        _make_bucket(c, PROD, "eu-west-1")
+        # Only the explicit-sha object exists; the catalog's current sha does not.
+        c.put_object(Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z")
+
+        result = runner.invoke(
+            app,
+            [
+                "promote",
+                "app",
+                "--manifest",
+                str(repo / "lambdas.toml"),
+                "--dev-bucket",
+                DEV,
+                "--prod-bucket",
+                PROD,
+                "--sha",
+                _EXPLICIT_SHA,
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert c.head_object(Bucket=PROD, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip")
+
+
+def test_cli_promote_sha_rejects_all_target(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "promote",
+            "all",
+            "--manifest",
+            str(repo / "lambdas.toml"),
+            "--dev-bucket",
+            DEV,
+            "--prod-bucket",
+            PROD,
+            "--sha",
+            _EXPLICIT_SHA,
+        ],
+    )
+    assert result.exit_code == 2  # --sha forbidden with 'all'
+
+
+def test_cli_promote_sha_invalid_hex_exits_2(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "promote",
+            "app",
+            "--manifest",
+            str(repo / "lambdas.toml"),
+            "--dev-bucket",
+            DEV,
+            "--prod-bucket",
+            PROD,
+            "--sha",
+            "not-a-valid-sha",
+        ],
+    )
+    assert result.exit_code == 2  # not 64-hex

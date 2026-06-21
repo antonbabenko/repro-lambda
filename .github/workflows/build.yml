@@ -25,6 +25,27 @@ on:
         required: false
         default: ""
         description: S3 bucket name for prod Lambda artifacts (master push only).
+      promotion_repo:
+        type: string
+        required: false
+        default: ""
+        description: >-
+          owner/repo of the centralized promotion workflow. When set, the build Step
+          Summary renders a ready-to-run `gh workflow run` command per function. Generic
+          by design - the reusable workflow never hardcodes a promotion target; the caller
+          supplies it (keep this empty for public callers).
+      promotion_workflow:
+        type: string
+        required: false
+        default: promote-lambda.yml
+        description: Workflow file name dispatched by the promotion command in the Step Summary.
+      project:
+        type: string
+        required: false
+        default: ""
+        description: >-
+          Project key the promotion workflow expects (-f project=...). Defaults to the
+          caller repo name when empty.
     secrets:
       sources_token:
         required: false
@@ -92,7 +113,60 @@ jobs:
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.dev_bucket }}
           REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
-        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
+        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --json-out "$RUNNER_TEMP/build-summary.json"
+
+      # Render the dev build's content shas + a copy-paste promotion command per function
+      # into the run's Step Summary (the build JSON is otherwise buried in step logs).
+      - name: Build summary (content shas + promote commands)
+        if: ${{ hashFiles(format('{0}/build-summary.json', runner.temp)) != '' }}
+        env:
+          SUMMARY_JSON: ${{ runner.temp }}/build-summary.json
+          PROMOTION_REPO: ${{ inputs.promotion_repo }}
+          PROMOTION_WORKFLOW: ${{ inputs.promotion_workflow }}
+          PROJECT: ${{ inputs.project != '' && inputs.project || github.event.repository.name }}
+          ARCH: ${{ matrix.arch }}
+          SRC_REPO: ${{ github.repository }}
+          SRC_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+
+          rows = json.load(open(os.environ["SUMMARY_JSON"]))
+          repo = os.environ["PROMOTION_REPO"]
+          wf = os.environ["PROMOTION_WORKFLOW"]
+          project = os.environ["PROJECT"]
+          arch = os.environ["ARCH"]
+          src = os.environ["SRC_REPO"]
+          commit = os.environ["SRC_COMMIT"]
+
+          out = [
+              f"## Lambda build ({arch})",
+              "",
+              f"Source: `{src}` @ `{commit[:12]}`",
+              "",
+              "| Function | Outcome | Content SHA | Dev key |",
+              "| --- | --- | --- | --- |",
+          ]
+          for r in rows:
+              out.append(
+                  f"| `{r['logical_name']}` | {r['outcome']} | `{r['sha256']}` | `{r['bucket_key']}` |"
+              )
+          out += ["", "### Promote to prod", ""]
+          for r in rows:
+              fn, sha = r["logical_name"], r["sha256"]
+              out += [f"**`{fn}`** prod pin: `{fn} = \"{sha}\"`", ""]
+              if repo:
+                  out += [
+                      "```bash",
+                      f"gh workflow run {wf} --repo {repo} "
+                      f"-f project={project} -f function={fn} -f sha={sha}",
+                      "```",
+                      "",
+                  ]
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(out) + "\n")
+          PY
 
       - name: Verify reproducible (PR only)
         if: github.event_name == 'pull_request'
