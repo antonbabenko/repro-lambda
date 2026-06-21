@@ -1,0 +1,28 @@
+name: move-major-tag
+
+# On every semver release tag (vX.Y.Z), force-move the sliding MAJOR tag vX to it,
+# so consumers can pin `@v0` (or `@v1` once 1.x ships) and always get the latest
+# backward-compatible reusable workflows. While the project is 0.x the major is `v0`.
+#
+# Safe by construction: publish.yml triggers on `v*.*.*` only, so moving a non-semver
+# tag (v0) never loop-triggers a publish; and a tag pushed by GITHUB_TOKEN does not
+# retrigger any workflow.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  move:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Force-move sliding major tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          MAJOR="${TAG%%.*}"   # v0.4.1 -> v0
+          git tag -f "$MAJOR" "$TAG"
+          git push -f origin "refs/tags/$MAJOR"

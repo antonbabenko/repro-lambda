@@ -21,7 +21,7 @@
 
       jobs:
         promote:
-          uses: antonbabenko/repro-lambda/.github/workflows/promote.yml@v1
+          uses: antonbabenko/repro-lambda/.github/workflows/promote.yml@v0
           with:
             source_sha: ${{ inputs.source_sha }}
             promoter_role_arn: arn:aws:iam::<account>:role/<promoter-role>

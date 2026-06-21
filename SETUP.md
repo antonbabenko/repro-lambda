@@ -260,20 +260,21 @@ on:
 
 jobs:
   build:
-    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0.2.1
+    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0
     with:
       manifest_path: lambdas.toml
-      repro_lambda_version: "0.2.1"
-    secrets:
-      aws-dev-role-arn: ${{ secrets.AWS_DEV_ROLE_ARN }}
-      aws-prod-role-arn: ${{ secrets.AWS_PROD_ROLE_ARN }}
+      aws_dev_role_arn: arn:aws:iam::<dev-account-id>:role/gha-lambda-builder-dev
+      dev_bucket: <env>-lambda-artifacts
+      # Optional - master-push upload to a prod bucket:
+      # aws_prod_role_arn: arn:aws:iam::<prod-account-id>:role/gha-lambda-builder-prod
+      # prod_bucket: <env>-lambda-artifacts
 ```
 
-Store the role ARNs (from the Terraform outputs above) as repo or organization
-secrets:
-
-- `AWS_DEV_ROLE_ARN` — `gha-lambda-builder-dev` role from the dev account
-- `AWS_PROD_ROLE_ARN` — `gha-lambda-builder-prod` role from the prod account
+Pin the reusable workflow with the sliding major tag `@v0` - it auto-moves to the
+latest backward-compatible 0.x release on every tag (switch to `@v1` once repro-lambda
+ships 1.0). The role ARNs are not secrets: the boundary is the OIDC trust policy plus
+the key-level bucket immutability, so they are plain inputs (only the account IDs,
+which are public), not stored secrets.
 
 ## Per-Lambda manifest
 
