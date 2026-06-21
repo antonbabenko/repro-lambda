@@ -36,6 +36,7 @@ from http.client import HTTPSConnection
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
+from repro_lambda import __version__
 from repro_lambda.manifest import Source
 
 # Limits (decompression-bomb + DoS bounds). Generous enough for real release artifacts.
@@ -48,6 +49,9 @@ HTTP_TIMEOUT = 60  # seconds per hop
 _GITHUB_API = "https://api.github.com"
 _JSON_MAX_BYTES = 16 * 1024 * 1024
 _CHUNK = 64 * 1024
+# The GitHub REST API rejects requests with no User-Agent (HTTP 403); send one on every
+# request (harmless for the plain https sources, required for github_release resolution).
+_USER_AGENT = f"repro-lambda/{__version__}"
 
 
 class SourceFetchError(RuntimeError):
@@ -143,7 +147,11 @@ def _http_request(
         conn.context = context
         try:
             target = parts.path + (f"?{parts.query}" if parts.query else "")
-            conn.request("GET", target or "/", headers={**req_headers, "Host": host})
+            conn.request(
+                "GET",
+                target or "/",
+                headers={"User-Agent": _USER_AGENT, **req_headers, "Host": host},
+            )
             resp = conn.getresponse()
             if resp.status in (301, 302, 303, 307, 308):
                 location = resp.getheader("Location")

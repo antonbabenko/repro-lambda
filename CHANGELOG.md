@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.1 - 2026-06-21
+
+### Fixed
+- Send a `User-Agent` header on every source fetch. The GitHub REST API rejects requests with no User-Agent (HTTP 403), which broke `github_release` source resolution (the asset lookup against `api.github.com`). The header is now `repro-lambda/<version>` on all requests (harmless for plain `https` sources, required for the API). Does not affect any content hash (request headers are not part of artifact identity).
+
 ## v0.5.0 - 2026-06-21
 
 ### Added
