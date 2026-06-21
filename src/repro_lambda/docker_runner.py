@@ -12,9 +12,15 @@ ARCH_TO_DOCKER_PLATFORM: dict[str, str] = {
     "x86_64": "linux/amd64",
 }
 
+# manylinux_2_17 (== manylinux2014) is the broadest baseline the AWS Lambda base
+# images (Amazon Linux 2023, glibc 2.34) still run, and pip's explicit --platform does
+# NOT expand a higher tag (e.g. 2_28) down to lower-baseline wheels. Many compiled
+# wheels (e.g. pydantic-core) ship only manylinux_2_17 for a given Python/arch, so a
+# 2_28 floor misses them with --only-binary=:all:. 2_17 matches 2_17 wheels and, via
+# pip's tag expansion, any lower baseline too.
 ARCH_TO_PIP_PLATFORM: dict[str, str] = {
-    "arm64": "manylinux_2_28_aarch64",
-    "x86_64": "manylinux_2_28_x86_64",
+    "arm64": "manylinux_2_17_aarch64",
+    "x86_64": "manylinux_2_17_x86_64",
 }
 
 ARCH_TO_NPM_CPU: dict[str, str] = {

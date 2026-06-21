@@ -20,8 +20,8 @@ def test_arch_mapping_tables_are_complete():
 def test_arch_mapping_values():
     assert ARCH_TO_DOCKER_PLATFORM["arm64"] == "linux/arm64"
     assert ARCH_TO_DOCKER_PLATFORM["x86_64"] == "linux/amd64"
-    assert ARCH_TO_PIP_PLATFORM["arm64"] == "manylinux_2_28_aarch64"
-    assert ARCH_TO_PIP_PLATFORM["x86_64"] == "manylinux_2_28_x86_64"
+    assert ARCH_TO_PIP_PLATFORM["arm64"] == "manylinux_2_17_aarch64"
+    assert ARCH_TO_PIP_PLATFORM["x86_64"] == "manylinux_2_17_x86_64"
 
 
 def test_build_python_lambda_raises_on_unknown_arch(tmp_path: Path):

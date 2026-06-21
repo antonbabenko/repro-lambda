@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.1 - 2026-06-21
+
+### Fixed
+- Lower the pip `--platform` floor from `manylinux_2_28` to `manylinux_2_17` (manylinux2014) for both arches. pip's explicit `--platform` does not expand a higher manylinux tag down to lower-baseline wheels, so with `--only-binary=:all:` a `2_28` floor failed to find compiled wheels that ship only `manylinux_2_17` for a given Python/arch (e.g. `pydantic-core`). `manylinux_2_17` is the broadest baseline the AWS Lambda base images (Amazon Linux 2023, glibc 2.34) still run, and it matches `2_17` wheels plus any lower baseline. Pure-Python lambdas are unaffected (their `py3-none-any` wheels never depended on the platform). The builder version bump re-keys all content hashes, as expected.
+
 ## v0.4.0 - 2026-06-21
 
 ### Added
