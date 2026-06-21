@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
-from repro_lambda.manifest import BuilderConfig, LambdaSpec
+from repro_lambda.manifest import BuilderConfig, LambdaSpec, resolve_builder
 from repro_lambda.source_stager import stage_source
 
 
@@ -45,6 +45,7 @@ def verify_reproducible(
 
     Returns (sha_build_1, sha_build_2) on match. Raises ReproducibilityError on mismatch.
     """
+    builder = resolve_builder(builder, spec)
     lock_path = repo_root / spec.resolved_requirements_lock
     extras = _extras_for(spec, lock_path, repo_root)
 

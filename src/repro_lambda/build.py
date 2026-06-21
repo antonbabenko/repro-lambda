@@ -12,7 +12,7 @@ from repro_lambda import __version__
 from repro_lambda.catalog import Catalog, CatalogEntry
 from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
 from repro_lambda.hasher import compute_content_hash
-from repro_lambda.manifest import BuilderConfig, LambdaSpec
+from repro_lambda.manifest import BuilderConfig, LambdaSpec, resolve_builder
 from repro_lambda.s3_uploader import S3Uploader, UploadResult
 from repro_lambda.source_stager import stage_source
 
@@ -61,6 +61,7 @@ def compute_sha_for(
     builder: BuilderConfig,
 ) -> str:
     """Stage source and compute the content hash; tempdir disposed on exit."""
+    builder = resolve_builder(builder, spec)
     with tempfile.TemporaryDirectory(prefix="repro-lambda-") as td:
         stage_dir = Path(td)
         lock_path = repo_root / spec.resolved_requirements_lock
@@ -85,6 +86,8 @@ def compute_sha_for(
             builder_version=__version__,
             extra_files=extras,
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
+            include_patterns=builder.include_patterns,
+            exclude_patterns=builder.exclude_patterns,
         )
 
 
@@ -99,6 +102,7 @@ def build_one(
     dry_run: bool = False,
 ) -> BuildOutcome:
     """Build one lambda end-to-end. Returns BuildOutcome with sha + cache verdict."""
+    builder = resolve_builder(builder, spec)
     target_bucket = _bucket_for(spec, bucket)
 
     with tempfile.TemporaryDirectory(prefix="repro-lambda-") as td:
@@ -126,6 +130,8 @@ def build_one(
             builder_version=__version__,
             extra_files=extras,
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
+            include_patterns=builder.include_patterns,
+            exclude_patterns=builder.exclude_patterns,
         )
         bucket_key = f"lambdas/{spec.logical_name}/{sha}.zip"
 

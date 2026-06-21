@@ -49,6 +49,11 @@ class LambdaSpec:
     hash_extra: str = ""
     package_json: str = ""
     extra_files: tuple[ExtraFile, ...] = ()
+    # Per-lambda builder overrides (REPLACE-once-set; None = inherit the [builder]
+    # default). base_image_python must stay digest-pinned. Resolved via resolve_builder().
+    base_image_python: str | None = None
+    include_patterns: list[str] | None = None
+    exclude_patterns: list[str] | None = None
 
     @property
     def resolved_requirements_lock(self) -> str:
@@ -80,6 +85,26 @@ class BuilderConfig:
 class Manifest:
     lambdas: list[LambdaSpec]
     builder: BuilderConfig
+
+
+def resolve_builder(default: BuilderConfig, spec: LambdaSpec) -> BuilderConfig:
+    """Resolve the effective builder for one lambda (REPLACE-once-set overrides).
+
+    Each per-lambda override fully REPLACES the matching [builder] default when set;
+    an unset override (None) inherits the default. An explicitly empty list replaces
+    with empty (stages/filters nothing) - the caller's choice, distinct from unset.
+    base_image_nodejs has no per-lambda override yet (add when a node lambda needs it).
+    """
+    return BuilderConfig(
+        base_image_python=spec.base_image_python or default.base_image_python,
+        base_image_nodejs=default.base_image_nodejs,
+        include_patterns=(
+            default.include_patterns if spec.include_patterns is None else spec.include_patterns
+        ),
+        exclude_patterns=(
+            default.exclude_patterns if spec.exclude_patterns is None else spec.exclude_patterns
+        ),
+    )
 
 
 def _parse_extra_files(path: Path, entry: dict) -> tuple[ExtraFile, ...]:
@@ -160,6 +185,26 @@ def load_manifest(path: Path) -> Manifest:
 
         extra_files = _parse_extra_files(path, entry)
 
+        override_base_image = entry.get("base_image_python")
+        if override_base_image is not None and "@sha256:" not in override_base_image:
+            raise ValueError(
+                f"{path}: lambda {entry.get('logical_name')!r} base_image_python override must be "
+                f"pinned by digest (got {override_base_image!r}; need image@sha256:<digest>)"
+            )
+        override_include = entry.get("include_patterns")
+        override_exclude = entry.get("exclude_patterns")
+        for fname, fval in (
+            ("include_patterns", override_include),
+            ("exclude_patterns", override_exclude),
+        ):
+            if fval is not None and (
+                not isinstance(fval, list) or not all(isinstance(x, str) for x in fval)
+            ):
+                raise ValueError(
+                    f"{path}: lambda {entry.get('logical_name')!r} {fname} override "
+                    f"must be a list of strings (got {fval!r})"
+                )
+
         lambdas.append(
             LambdaSpec(
                 logical_name=entry["logical_name"],
@@ -174,6 +219,9 @@ def load_manifest(path: Path) -> Manifest:
                 lambda_at_edge=bool(entry.get("lambda_at_edge", False)),
                 hash_extra=entry.get("hash_extra", ""),
                 extra_files=extra_files,
+                base_image_python=override_base_image,
+                include_patterns=list(override_include) if override_include is not None else None,
+                exclude_patterns=list(override_exclude) if override_exclude is not None else None,
             )
         )
 

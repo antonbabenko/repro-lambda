@@ -303,6 +303,33 @@ Pin the `base_image_python` to a specific digest with `docker pull <image> &&
 docker inspect --format='{{index .RepoDigests 0}}' <image>` — never use a
 floating tag in production.
 
+### Per-lambda builder overrides
+
+`[builder]` sets the defaults for every lambda. Any `[[lambda]]` may override
+`base_image_python`, `include_patterns`, or `exclude_patterns` for itself. An
+override REPLACES the default for that field (lists are not merged); an unset
+field inherits `[builder]`. Use this when one lambda needs a different base image
+or a tighter file filter (so it re-hashes only on changes that affect it):
+
+```toml
+[[lambda]]
+logical_name      = "worker"
+source_dir        = "src/worker"
+requirements_lock = "src/worker/requirements.${arch}.lock"
+runtime           = "python3.13"
+arch              = "arm64"
+handler           = "worker.handler"
+# Override: only this lambda's runtime modules trigger a rebuild, and it builds
+# on its own pinned base image. base_image_python must still be digest-pinned.
+base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:<other-digest>"
+include_patterns  = ["worker/**/*.py", "worker/**/*.json"]
+exclude_patterns  = ["**/tests/**"]
+```
+
+The resolved per-lambda builder (base-image digest + include/exclude lists +
+builder version) folds into the content hash, so changing an override re-keys
+that lambda's artifact while leaving the others untouched.
+
 ## Terraform consumer — `s3_existing_package`
 
 In the Terraform that creates your Lambda function, point at the artifact in

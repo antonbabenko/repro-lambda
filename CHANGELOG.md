@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.2 - 2026-06-21
+
+### Added
+- Per-lambda builder overrides: any `[[lambda]]` may now set `base_image_python`, `include_patterns`, or `exclude_patterns` to override the `[builder]` defaults for itself. An override fully REPLACES the matching default (lists are not merged); an unset field inherits `[builder]`. A per-lambda `base_image_python` must still be digest-pinned (validated at manifest load). This lets one lambda build on its own base image or filter its source more tightly than the others - e.g. a lambda that bundles a large prebuilt tree can narrow `include_patterns` to just its runtime modules so unrelated file changes no longer re-key its artifact. The resolved per-lambda builder (base-image digest + include/exclude lists + builder version) folds into the content hash, so changing an override re-keys only that lambda. Manifests with no per-lambda overrides resolve to the `[builder]` defaults unchanged. The builder version bump re-keys all content hashes, as expected.
+
 ## v0.4.1 - 2026-06-21
 
 ### Fixed

@@ -25,11 +25,14 @@ def compute_content_hash(
     *,
     extra_files: list[tuple[Path, str]] | None = None,
     payload_exec: list[tuple[str, bool]] | None = None,
+    include_patterns: list[str] | None = None,
+    exclude_patterns: list[str] | None = None,
 ) -> str:
     """
     sha256 over: sorted (relative-path, sha256(content)) tuples for the staged tree
     + sha256(requirements_lock) + spec scalars + base_image + builder_version
-    + optional extra_files keyed by destination relname (e.g. "package.json").
+    + optional resolved include/exclude filter lists + optional extra_files keyed by
+    destination relname (e.g. "package.json").
 
     Inputs are concatenated with newline separators in a fixed order, then hashed.
 
@@ -37,6 +40,12 @@ def compute_content_hash(
     (dest_relname, file_bytes) only - not the host path - so the hash is
     host-path-independent. Callers with no extras produce byte-identical hashes
     to v0.1 (the extras section is omitted entirely when extra_files is falsy).
+
+    include_patterns / exclude_patterns are the RESOLVED per-lambda filter lists.
+    They are folded sorted (membership is order-independent, so a pure reorder does
+    not re-key) and only when not None, so an explicit empty list (replace-with-empty)
+    hashes differently from an unset/None filter. Callers passing None omit the
+    section entirely, preserving hashes for code paths that do not resolve a builder.
     """
     h = hashlib.sha256()
 
@@ -61,6 +70,17 @@ def compute_content_hash(
     h.update(f"hash_extra={spec.hash_extra}\n".encode())
     h.update(f"base_image={base_image}\n".encode())
     h.update(f"builder_version={builder_version}\n".encode())
+
+    if include_patterns is not None:
+        h.update(b"---include---\n")
+        for pat in sorted(include_patterns):
+            h.update(pat.encode("utf-8"))
+            h.update(b"\n")
+    if exclude_patterns is not None:
+        h.update(b"---exclude---\n")
+        for pat in sorted(exclude_patterns):
+            h.update(pat.encode("utf-8"))
+            h.update(b"\n")
 
     if extra_files:
         h.update(b"---extras---\n")
