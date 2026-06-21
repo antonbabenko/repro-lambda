@@ -25,6 +25,14 @@ on:
         required: false
         default: ""
         description: S3 bucket name for prod Lambda artifacts (master push only).
+    secrets:
+      sources_token:
+        required: false
+        description: >-
+          Token with read access to the private release repos referenced by any
+          github_release [[lambda.source]]. Exported as REPRO_LAMBDA_SOURCES_TOKEN for the
+          build. Omit when every source is a public https URL. Generic by design - the
+          reusable workflow never names a consumer repo.
 
 jobs:
   detect-arches:
@@ -64,6 +72,16 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v8.2.0
 
+      # Content-addressed source cache, scoped per-arch (a source's sha256 is its key, so a
+      # re-pin changes the manifest hash -> fresh fetch; restore-keys reuses the prior cache).
+      - name: Cache fetched sources
+        uses: actions/cache@v4
+        with:
+          path: builds/.sources-cache
+          key: repro-sources-${{ matrix.arch }}-${{ hashFiles(inputs.manifest_path) }}
+          restore-keys: |
+            repro-sources-${{ matrix.arch }}-
+
       - name: Configure AWS credentials (dev)
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -73,6 +91,7 @@ jobs:
       - name: Build (dev bucket)
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.dev_bucket }}
+          REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
         run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
 
       - name: Verify reproducible (PR only)
@@ -90,6 +109,7 @@ jobs:
         if: github.ref == 'refs/heads/master' && inputs.aws_prod_role_arn != ''
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.prod_bucket }}
+          REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
         run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
 
       - name: Commit catalog drift (master only, dev bot)

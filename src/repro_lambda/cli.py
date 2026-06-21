@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Annotated
@@ -128,6 +129,8 @@ def build(
     except subprocess.CalledProcessError:
         source_commit = "unknown"
 
+    sources_token = os.environ.get("REPRO_LAMBDA_SOURCES_TOKEN") or None
+
     summary = []
     for spec in selected:
         outcome = build_one(
@@ -138,6 +141,7 @@ def build(
             catalog=catalog,
             source_commit=source_commit,
             dry_run=dry_run,
+            sources_token=sources_token,
         )
         summary.append(
             {
@@ -261,13 +265,39 @@ def promote(
 @app.command()
 def lock(
     manifest: Annotated[Path, typer.Option("--manifest", "-m")] = Path("lambdas.toml"),
+    requirements: Annotated[
+        bool,
+        typer.Option(
+            "--requirements/--no-requirements",
+            help="Regenerate per-arch requirements.${arch}.lock via uv pip compile.",
+        ),
+    ] = True,
+    sources: Annotated[
+        bool,
+        typer.Option(
+            "--sources/--no-sources",
+            help="Re-resolve version_from + re-pin [[lambda.source]] sha256 in the manifest.",
+        ),
+    ] = True,
 ) -> None:
-    """Regenerate per-arch requirements.${arch}.lock files via `uv pip compile`."""
+    """Lock pinned inputs: per-arch requirements locks and/or declarative source pins."""
     from repro_lambda.manifest import load_manifest
 
     parsed = load_manifest(manifest)
     repo_root = manifest.parent.resolve()
 
+    if requirements:
+        _lock_requirements(parsed, repo_root)
+
+    if sources:
+        from repro_lambda.source_locker import lock_sources
+
+        token = os.environ.get("REPRO_LAMBDA_SOURCES_TOKEN") or None
+        changed = lock_sources(manifest, token)
+        typer.echo(f"lock sources: {'updated ' + str(manifest) if changed else 'no changes'}")
+
+
+def _lock_requirements(parsed, repo_root: Path) -> None:
     for spec in parsed.lambdas:
         if spec.package_manager == "npm":
             typer.echo(

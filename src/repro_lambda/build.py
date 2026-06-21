@@ -88,6 +88,7 @@ def compute_sha_for(
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
             include_patterns=builder.include_patterns,
             exclude_patterns=builder.exclude_patterns,
+            sources=spec.sources,
         )
 
 
@@ -100,6 +101,8 @@ def build_one(
     catalog: Catalog,
     source_commit: str,
     dry_run: bool = False,
+    sources_token: str | None = None,
+    sources_cache: Path | None = None,
 ) -> BuildOutcome:
     """Build one lambda end-to-end. Returns BuildOutcome with sha + cache verdict."""
     builder = resolve_builder(builder, spec)
@@ -132,6 +135,7 @@ def build_one(
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
             include_patterns=builder.include_patterns,
             exclude_patterns=builder.exclude_patterns,
+            sources=spec.sources,
         )
         bucket_key = f"lambdas/{spec.logical_name}/{sha}.zip"
 
@@ -142,6 +146,18 @@ def build_one(
         if uploader.exists(bucket=target_bucket, key=bucket_key):
             _record(catalog, spec, sha, source_commit, builder)
             return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
+
+        # Cache miss only: fetch + verify + extract declarative sources into the staged
+        # tree (post-filter; collides loudly with already-staged source/payload files).
+        if spec.sources:
+            from repro_lambda.sources import fetch_sources
+
+            fetch_sources(
+                sources=spec.sources,
+                dest_root=stage_dir / "source",
+                cache_dir=sources_cache or (repo_root / "builds" / ".sources-cache"),
+                github_token=sources_token,
+            )
 
         out_zip = stage_dir / "lambda.zip"
         if spec.package_manager == "pip":

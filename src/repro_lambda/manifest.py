@@ -35,6 +35,74 @@ class ExtraFile:
     executable: bool = False
 
 
+SUPPORTED_SOURCE_TYPES = {"github_release", "https"}
+SUPPORTED_EXTRACT = {"zip", "tar.gz", "none"}
+
+
+@dataclass(frozen=True)
+class VersionFrom:
+    """Lock-time version resolution rule for a source (never hashed).
+
+    At `lock` time the referenced source (`source`, by name) is fetched + extracted,
+    the asdf-style `<key> <value>` line is read from `file` (relative to that source's
+    extracted tree), and the value re-pins this source's `version`. `build` never
+    resolves this - it substitutes the already-locked `version` into the url/tag/asset
+    templates. Single-level only: the referenced source may not itself use version_from.
+    """
+
+    source: str
+    file: str
+    key: str
+
+
+@dataclass(frozen=True)
+class Source:
+    """A pinned external artifact fetched into the package before the container build.
+
+    Two types: `github_release` (private, asset resolved via the GitHub API then
+    downloaded) and `https` (public direct URL). Every source is PINNED: `sha256` is
+    verified before extraction, and the resolved metadata (not the bytes) is what folds
+    into the content hash. `extract` selects the archive handling (`zip`/`tar.gz`/`none`);
+    `member`, when set, extracts a single archive entry to `dest`, otherwise the whole
+    archive lands under `dest` (package-root-relative). `version`, when a `version_from`
+    rule is present, is the lock-written concrete version substituted into the url/tag/
+    asset templates' `{version}` placeholder at fetch + hash time.
+    """
+
+    name: str
+    type: str
+    sha256: str
+    extract: str
+    dest: str
+    repo: str = ""
+    tag: str = ""
+    asset: str = ""
+    url: str = ""
+    member: str | None = None
+    executable: bool = False
+    version: str = ""
+    version_from: VersionFrom | None = None
+
+    def _subst(self, value: str) -> str:
+        return value.replace("{version}", self.version) if self.version else value
+
+    @property
+    def resolved_url(self) -> str:
+        return self._subst(self.url)
+
+    @property
+    def resolved_tag(self) -> str:
+        return self._subst(self.tag)
+
+    @property
+    def resolved_asset(self) -> str:
+        return self._subst(self.asset)
+
+    @property
+    def resolved_member(self) -> str | None:
+        return self._subst(self.member) if self.member else self.member
+
+
 @dataclass(frozen=True)
 class LambdaSpec:
     logical_name: str
@@ -54,6 +122,7 @@ class LambdaSpec:
     base_image_python: str | None = None
     include_patterns: list[str] | None = None
     exclude_patterns: list[str] | None = None
+    sources: tuple[Source, ...] = ()
 
     @property
     def resolved_requirements_lock(self) -> str:
@@ -127,6 +196,185 @@ def _parse_extra_files(path: Path, entry: dict) -> tuple[ExtraFile, ...]:
     return tuple(parsed)
 
 
+def _validate_relpath(path: Path, field: str, value: str, *, where: str) -> None:
+    if value.startswith("/") or ".." in Path(value).parts:
+        raise ValueError(f"{path}: {where} {field}={value!r} must be a relative path without '..'")
+
+
+def _is_hex64(s: str) -> bool:
+    return len(s) == 64 and all(c in "0123456789abcdef" for c in s)
+
+
+def _paths_overlap(a: str, b: str) -> bool:
+    """True if two normalized package-relative paths are equal or one is a tree prefix
+    of the other (``a`` vs ``a/b``). Siblings (``a/b`` vs ``a/c``) do not overlap."""
+    if a == b:
+        return True
+    pa, pb = a.split("/"), b.split("/")
+    n = min(len(pa), len(pb))
+    return pa[:n] == pb[:n]
+
+
+def _reject_dest_overlaps(path: Path, named_dests: list[tuple[str, str]]) -> None:
+    norm = [(name, Path(d).as_posix().strip("/")) for name, d in named_dests]
+    for i in range(len(norm)):
+        for j in range(i + 1, len(norm)):
+            a_name, a = norm[i]
+            b_name, b = norm[j]
+            if _paths_overlap(a, b):
+                raise ValueError(
+                    f"{path}: source dest overlap between {a_name!r} ({a!r}) and "
+                    f"{b_name!r} ({b!r}); each source must stage to a disjoint subtree"
+                )
+
+
+def _parse_sources(path: Path, entry: dict) -> tuple[Source, ...]:
+    """Parse + validate a lambda's optional [[lambda.source]] entries."""
+    parsed: list[Source] = []
+    seen_names: set[str] = set()
+    lname = entry.get("logical_name")
+    for s in entry.get("source", []):
+        name = s.get("name", "")
+        if not name:
+            raise ValueError(f"{path}: each [[lambda.source]] requires a non-empty 'name'")
+        if name in seen_names:
+            raise ValueError(f"{path}: duplicate source name {name!r} in lambda {lname!r}")
+        seen_names.add(name)
+
+        stype = s.get("type", "")
+        if stype not in SUPPORTED_SOURCE_TYPES:
+            raise ValueError(
+                f"{path}: source {name!r} type must be one of "
+                f"{sorted(SUPPORTED_SOURCE_TYPES)} (got {stype!r})"
+            )
+
+        extract = s.get("extract", "")
+        if extract not in SUPPORTED_EXTRACT:
+            raise ValueError(
+                f"{path}: source {name!r} extract must be one of "
+                f"{sorted(SUPPORTED_EXTRACT)} (got {extract!r})"
+            )
+
+        dest = s.get("dest", "")
+        if not dest:
+            raise ValueError(f"{path}: source {name!r} requires a non-empty 'dest'")
+        _validate_relpath(path, "dest", dest, where=f"source {name!r}")
+
+        sha256 = s.get("sha256", "")
+        if sha256 and not _is_hex64(sha256):
+            raise ValueError(
+                f"{path}: source {name!r} sha256 must be 64 lowercase hex chars (got {sha256!r})"
+            )
+
+        member = s.get("member")
+        if member is not None:
+            if extract == "none":
+                raise ValueError(
+                    f"{path}: source {name!r} sets 'member' but extract='none' "
+                    f"(no archive to extract a member from)"
+                )
+            _validate_relpath(path, "member", member, where=f"source {name!r}")
+
+        repo = s.get("repo", "")
+        tag = s.get("tag", "")
+        asset = s.get("asset", "")
+        url = s.get("url", "")
+        if stype == "github_release":
+            for fn, fv in (("repo", repo), ("tag", tag), ("asset", asset)):
+                if not fv:
+                    raise ValueError(
+                        f"{path}: github_release source {name!r} requires non-empty {fn!r}"
+                    )
+            if repo.count("/") != 1 or repo.startswith("/") or repo.endswith("/"):
+                raise ValueError(
+                    f"{path}: github_release source {name!r} repo must be 'owner/name' "
+                    f"(got {repo!r})"
+                )
+            if url:
+                raise ValueError(
+                    f"{path}: github_release source {name!r} must not set 'url' "
+                    f"(it is resolved from repo/tag/asset)"
+                )
+        else:  # https
+            if not url:
+                raise ValueError(f"{path}: https source {name!r} requires non-empty 'url'")
+            if not url.startswith("https://"):
+                raise ValueError(
+                    f"{path}: https source {name!r} url must start with https:// (got {url!r})"
+                )
+            for fn, fv in (("repo", repo), ("tag", tag), ("asset", asset)):
+                if fv:
+                    raise ValueError(
+                        f"{path}: https source {name!r} must not set {fn!r} (use 'url')"
+                    )
+
+        version = s.get("version", "")
+        vf_raw = s.get("version_from")
+        version_from = None
+        if vf_raw is not None:
+            for fn in ("source", "file", "key"):
+                if not vf_raw.get(fn):
+                    raise ValueError(
+                        f"{path}: source {name!r} version_from requires non-empty {fn!r}"
+                    )
+            if vf_raw["source"] == name:
+                raise ValueError(
+                    f"{path}: source {name!r} version_from.source cannot reference itself"
+                )
+            _validate_relpath(path, "version_from.file", vf_raw["file"], where=f"source {name!r}")
+            version_from = VersionFrom(
+                source=vf_raw["source"], file=vf_raw["file"], key=vf_raw["key"]
+            )
+
+        uses_template = any("{version}" in v for v in (url, tag, asset, member or ""))
+        if uses_template and not version and version_from is None:
+            raise ValueError(
+                f"{path}: source {name!r} uses '{{version}}' but has no 'version' value or "
+                f"[lambda.source.version_from] rule to resolve it"
+            )
+
+        parsed.append(
+            Source(
+                name=name,
+                type=stype,
+                sha256=sha256,
+                extract=extract,
+                dest=dest,
+                repo=repo,
+                tag=tag,
+                asset=asset,
+                url=url,
+                member=member,
+                executable=bool(s.get("executable", False)),
+                version=version,
+                version_from=version_from,
+            )
+        )
+
+    by_name = {src.name: src for src in parsed}
+    for src in parsed:
+        if src.version_from is None:
+            continue
+        ref = src.version_from.source
+        if ref not in by_name:
+            raise ValueError(
+                f"{path}: source {src.name!r} version_from.source={ref!r} is not a defined source"
+            )
+        if by_name[ref].version_from is not None:
+            raise ValueError(
+                f"{path}: source {src.name!r} version_from.source={ref!r} is itself "
+                f"version_from-resolved (single-level only)"
+            )
+        if by_name[ref].extract == "none":
+            raise ValueError(
+                f"{path}: source {src.name!r} version_from.source={ref!r} has extract='none'; "
+                f"a referenced source must be an archive to read its version file"
+            )
+
+    _reject_dest_overlaps(path, [(src.name, src.dest) for src in parsed])
+    return tuple(parsed)
+
+
 def load_manifest(path: Path) -> Manifest:
     """Parse lambdas.toml and validate semantic invariants."""
     with path.open("rb") as f:
@@ -184,6 +432,7 @@ def load_manifest(path: Path) -> Manifest:
             )
 
         extra_files = _parse_extra_files(path, entry)
+        sources = _parse_sources(path, entry)
 
         override_base_image = entry.get("base_image_python")
         if override_base_image is not None and "@sha256:" not in override_base_image:
@@ -222,6 +471,7 @@ def load_manifest(path: Path) -> Manifest:
                 base_image_python=override_base_image,
                 include_patterns=list(override_include) if override_include is not None else None,
                 exclude_patterns=list(override_exclude) if override_exclude is not None else None,
+                sources=sources,
             )
         )
 

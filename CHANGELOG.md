@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0 - 2026-06-21
+
+### Added
+- Declarative sources DSL: `[[lambda.source]]` fetches a pinned external artifact into the package before the container build, replacing consumer-side download scripts. Two source types - `github_release` (`repo`/`tag`/`asset`, resolved via the GitHub API) and `https` (a direct `url`). Each source is PINNED: `sha256` is verified before extraction; `extract` is `zip`/`tar.gz`/`none`; an optional `member` extracts a single file or a (versioned) directory subtree to `dest` (package-root-relative); `executable` sets +x. Source names are required and unique per lambda; dest collisions (including tree overlaps and overlaps with the staged source) are refused.
+- `version_from` (single-level): a source can derive its `version` at lock time from an asdf-style `key value` line in a referenced source's file (read relative to that source's member-stripped tree). `{version}` is substituted into `url`/`tag`/`asset`/`member`. `version_from` is a lock input and never participates in the content hash.
+- `lock --sources` re-resolves `version_from`, re-downloads each source, recomputes its sha256, and rewrites `lambdas.toml` in place with tomlkit (comments preserved, atomic). It is idempotent: a run that changes nothing leaves the file byte-for-byte unchanged (no spurious PR). `lock` keeps regenerating requirements locks too; use `--no-requirements` / `--no-sources` to scope it.
+- The reusable `build.yml` gains a generic `sources_token` secret (exported as `REPRO_LAMBDA_SOURCES_TOKEN`, used only for `github_release` API calls) and an arch-scoped `actions/cache` for the content-addressed source cache.
+
+### Security
+- SSRF-hardened fetcher: HTTPS-only with a manual redirect loop; each hop resolves the hostname, refuses any non-global-unicast / reserved / private / loopback / link-local / IPv4-mapped address, and connects to that pinned IP while verifying the TLS cert against the original hostname (no second DNS lookup a rebind could poison). `Authorization` is stripped on any cross-host redirect (e.g. the GitHub API -> asset host), so a private token never leaks. Download size is capped and log URLs are redacted (userinfo + query stripped).
+- Hardened extraction: sha256 is verified before any archive is opened; entries with absolute / `..` / symlink / hardlink / device / fifo paths are rejected; total bytes, entry count, and per-entry bytes are bounded (decompression-bomb limits, with streaming tar reads); files are written to a temp tree then promoted with normalized mtime + perms. The sha256-keyed cache is re-verified on every use (anti cache-poisoning).
+- Content hashing folds the RESOLVED source metadata (not the bytes), so the artifact key is computable offline and a `member`/`extract`/`dest`/`sha256`/version change re-keys, while a re-fetch alone does not.
+
 ## v0.4.2 - 2026-06-21
 
 ### Added
