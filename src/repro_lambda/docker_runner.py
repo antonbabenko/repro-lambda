@@ -12,16 +12,49 @@ ARCH_TO_DOCKER_PLATFORM: dict[str, str] = {
     "x86_64": "linux/amd64",
 }
 
-# manylinux_2_17 (== manylinux2014) is the broadest baseline the AWS Lambda base
-# images (Amazon Linux 2023, glibc 2.34) still run, and pip's explicit --platform does
-# NOT expand a higher tag (e.g. 2_28) down to lower-baseline wheels. Many compiled
-# wheels (e.g. pydantic-core) ship only manylinux_2_17 for a given Python/arch, so a
-# 2_28 floor misses them with --only-binary=:all:. 2_17 matches 2_17 wheels and, via
-# pip's tag expansion, any lower baseline too.
-ARCH_TO_PIP_PLATFORM: dict[str, str] = {
-    "arm64": "manylinux_2_17_aarch64",
-    "x86_64": "manylinux_2_17_x86_64",
+# The AWS Lambda base images (Amazon Linux 2023) ship glibc 2.34, so the runtime can load
+# any manylinux wheel up to manylinux_2_34. pip's explicit --platform matches (close to)
+# that exact tag, so a SINGLE platform misses wheels tagged with other baselines in both
+# directions: a 2_28 floor misses 2_17-only wheels (e.g. pydantic-core), and a 2_17 floor
+# misses higher-baseline compiled wheels (e.g. wrapt ships cp313 only as manylinux_2_28 ->
+# pip silently falls back to py3-none-any, which broke aws-xray-sdk's runtime boto3 patching
+# and 500'd a Lambda). A single floor cannot satisfy both. Pass the FULL compatible range as
+# repeated --platform flags, newest -> oldest, capped at 2_34 (the runtime's glibc): pip then
+# selects the most-specific COMPILED wheel each package offers and only falls back to
+# py3-none-any when no compiled wheel exists. Never list a baseline ABOVE 2_34 - that would
+# let pip pick a wheel the runtime cannot load. (arm64 manylinux starts at 2014/2_17; the
+# manylinux1/2010/2_5 legacy aliases are x86_64-only.)
+ARCH_TO_PIP_PLATFORMS: dict[str, list[str]] = {
+    "x86_64": [
+        "manylinux_2_34_x86_64",
+        "manylinux_2_28_x86_64",
+        "manylinux_2_24_x86_64",
+        "manylinux2014_x86_64",
+        "manylinux_2_17_x86_64",
+        "manylinux_2_12_x86_64",
+        "manylinux2010_x86_64",
+        "manylinux_2_5_x86_64",
+        "manylinux1_x86_64",
+    ],
+    "arm64": [
+        "manylinux_2_34_aarch64",
+        "manylinux_2_28_aarch64",
+        "manylinux_2_24_aarch64",
+        "manylinux2014_aarch64",
+        "manylinux_2_17_aarch64",
+    ],
 }
+
+
+def pip_platform_flags(arch: str) -> str:
+    """Repeated ``--platform <tag>`` flags (space-joined) for an arch's manylinux range.
+
+    Word-split UNQUOTED into the pip command in the container so each tag becomes its own
+    flag. pip treats a wheel as compatible with ANY listed platform and prefers the
+    earliest (newest baseline) match, so compiled wheels win over the py3-none-any fallback.
+    """
+    return " ".join(f"--platform {tag}" for tag in ARCH_TO_PIP_PLATFORMS[arch])
+
 
 ARCH_TO_NPM_CPU: dict[str, str] = {
     "arm64": "arm64",
@@ -31,9 +64,9 @@ ARCH_TO_NPM_CPU: dict[str, str] = {
 # Invariance: keys must match across all arch lookup tables. Adding a new arch
 # to one without the other would cause install_nodejs_dependencies to raise
 # KeyError instead of DockerRunError. Caught at import time.
-assert set(ARCH_TO_DOCKER_PLATFORM) == set(ARCH_TO_PIP_PLATFORM) == set(ARCH_TO_NPM_CPU), (
+assert set(ARCH_TO_DOCKER_PLATFORM) == set(ARCH_TO_PIP_PLATFORMS) == set(ARCH_TO_NPM_CPU), (
     "arch lookup tables must share the same key set; "
-    f"DOCKER={set(ARCH_TO_DOCKER_PLATFORM)} PIP={set(ARCH_TO_PIP_PLATFORM)} NPM={set(ARCH_TO_NPM_CPU)}"
+    f"DOCKER={set(ARCH_TO_DOCKER_PLATFORM)} PIP={set(ARCH_TO_PIP_PLATFORMS)} NPM={set(ARCH_TO_NPM_CPU)}"
 )
 
 
@@ -49,7 +82,7 @@ cp -R /src/source/. "$PKG/"
 
 pip install \
   --no-cache-dir --no-compile --require-hashes --only-binary=:all: \
-  --platform "$PIP_PLATFORM" \
+  $PIP_PLATFORM_FLAGS \
   --abi "$PIP_ABI" \
   --python-version "$PIP_PYVER" \
   --implementation cp \
@@ -130,7 +163,7 @@ def build_python_lambda(
     python_version: str,
 ) -> None:
     """v0.1-compatible: install + pack inside the Python container."""
-    if arch not in ARCH_TO_PIP_PLATFORM:
+    if arch not in ARCH_TO_PIP_PLATFORMS:
         raise DockerRunError(f"unsupported arch {arch!r}")
     if shutil.which("docker") is None:
         raise DockerRunError("docker CLI not found on PATH")
@@ -158,7 +191,7 @@ def build_python_lambda(
         "-e",
         "PYTHONPATH=/builder",
         "-e",
-        f"PIP_PLATFORM={ARCH_TO_PIP_PLATFORM[arch]}",
+        f"PIP_PLATFORM_FLAGS={pip_platform_flags(arch)}",
         "-e",
         f"PIP_ABI=cp{pyver_compact}",
         "-e",

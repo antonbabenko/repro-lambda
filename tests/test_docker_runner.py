@@ -5,23 +5,39 @@ import pytest
 
 from repro_lambda.docker_runner import (
     ARCH_TO_DOCKER_PLATFORM,
-    ARCH_TO_PIP_PLATFORM,
+    ARCH_TO_PIP_PLATFORMS,
     DockerRunError,
     build_python_lambda,
+    pip_platform_flags,
 )
 
 
 def test_arch_mapping_tables_are_complete():
     for arch in ("arm64", "x86_64"):
         assert arch in ARCH_TO_DOCKER_PLATFORM
-        assert arch in ARCH_TO_PIP_PLATFORM
+        assert arch in ARCH_TO_PIP_PLATFORMS
 
 
 def test_arch_mapping_values():
     assert ARCH_TO_DOCKER_PLATFORM["arm64"] == "linux/arm64"
     assert ARCH_TO_DOCKER_PLATFORM["x86_64"] == "linux/amd64"
-    assert ARCH_TO_PIP_PLATFORM["arm64"] == "manylinux_2_17_aarch64"
-    assert ARCH_TO_PIP_PLATFORM["x86_64"] == "manylinux_2_17_x86_64"
+
+
+def test_pip_platform_flags_span_the_range_and_cap_at_2_34():
+    """Multiple --platform flags so pip picks the best COMPILED wheel per package; a single
+    tag silently dropped compiled wheels (e.g. wrapt -> py3-none-any). Cap at glibc 2.34."""
+    for arch, tag_arch in (("x86_64", "x86_64"), ("arm64", "aarch64")):
+        flags = pip_platform_flags(arch)
+        tags = ARCH_TO_PIP_PLATFORMS[arch]
+        # Repeated --platform, one per tag, in declared (newest-first) order.
+        assert flags == " ".join(f"--platform {t}" for t in tags)
+        assert flags.count("--platform ") == len(tags)
+        # Must include both the historical floors that each broke one direction.
+        assert f"manylinux_2_17_{tag_arch}" in flags  # pydantic-core (2_17-only) still resolves
+        assert f"manylinux_2_28_{tag_arch}" in flags  # wrapt's compiled cp313 wheel resolves
+        # Never a baseline above the runtime's glibc 2.34 (would be unloadable).
+        for n in (35, 36, 38, 40):
+            assert f"manylinux_2_{n}_" not in flags
 
 
 def test_build_python_lambda_raises_on_unknown_arch(tmp_path: Path):
