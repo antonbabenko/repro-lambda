@@ -157,18 +157,30 @@ jobs:
               out.append(
                   f"| `{r['logical_name']}` | {r['outcome']} | `{r['sha256']}` | `{r['bucket_key']}` |"
               )
-          out += ["", "### Promote to prod", ""]
+          out += [
+              "",
+              "### Pipeline",
+              "",
+              "1. **Build** (this run) - artifacts uploaded to the dev bucket, keyed by content sha.",
+              "2. **Pin dev** - point the dev stack's lambda pin at the sha below, then apply dev and test.",
+              "3. **Promote to prod** - run the promote command below (copies dev -> prod by content"
+              " sha + opens the prod-pin PR), then apply prod.",
+              "",
+              "### Per-function",
+              "",
+          ]
           for r in rows:
               fn, sha = r["logical_name"], r["sha256"]
-              out += [f"**`{fn}`** prod pin: `{fn} = \"{sha}\"`", ""]
+              out += [f"**`{fn}`** - content sha `{sha}`", "", f"- dev pin: `{fn} = \"{sha}\"`"]
               if repo:
                   out += [
+                      "- promote to prod:",
                       "```bash",
                       f"gh workflow run {wf} --repo {repo} "
                       f"-f project={project} -f function={fn} -f sha={sha}",
                       "```",
-                      "",
                   ]
+              out += [""]
 
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write("\n".join(out) + "\n")
