@@ -75,6 +75,7 @@ def compute_sha_for(
             builder=builder,
             stage_dir=stage_dir,
             extra_files=extras,
+            payload_files=list(spec.extra_files),
         )
         return compute_content_hash(
             staged_source_root=stage_dir / "source",
@@ -83,6 +84,7 @@ def compute_sha_for(
             base_image=primary_base_image,
             builder_version=__version__,
             extra_files=extras,
+            payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
         )
 
 
@@ -113,6 +115,7 @@ def build_one(
             builder=builder,
             stage_dir=stage_dir,
             extra_files=extras,
+            payload_files=list(spec.extra_files),
         )
 
         sha = compute_content_hash(
@@ -122,6 +125,7 @@ def build_one(
             base_image=primary_base_image,
             builder_version=__version__,
             extra_files=extras,
+            payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
         )
         bucket_key = f"lambdas/{spec.logical_name}/{sha}.zip"
 

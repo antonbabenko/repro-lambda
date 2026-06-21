@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.0 - 2026-06-21
+
+### Added
+- `extra_files` manifest field: bundle prebuilt files or directories into a lambda package alongside its source. Each `[[lambda.extra_files]]` entry has `src` (repo-root-relative, where CI materialized it - e.g. a digest-pinned binary or an extracted release tree), `dest` (package-root-relative), and an optional `executable` flag (sets +x on a file; ignored for directories, which keep source perms). The bytes fold into the content hash via the staged source tree, and the executable bit folds in separately, so flipping it changes the artifact hash even when bytes are identical. This lets a lambda ship vendored CLIs or release trees the consumer's CI downloads and verifies, while the tool itself stays free of any network/tool-download logic. Paths are validated as relative and `..`-free. Specs without `extra_files` hash byte-identically to before.
+
 ## v0.3.0 - 2026-06-21
 
 ### Added

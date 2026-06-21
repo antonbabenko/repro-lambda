@@ -24,6 +24,7 @@ def compute_content_hash(
     builder_version: str,
     *,
     extra_files: list[tuple[Path, str]] | None = None,
+    payload_exec: list[tuple[str, bool]] | None = None,
 ) -> str:
     """
     sha256 over: sorted (relative-path, sha256(content)) tuples for the staged tree
@@ -71,5 +72,14 @@ def compute_content_hash(
             h.update(b"\x00")
             h.update(_sha256_file(src).encode("ascii"))
             h.update(b"\n")
+
+    # Payload extra_files (prebuilt binaries/trees) are already hashed by content
+    # via the staged source tree above; fold in their executable bit here so that
+    # flipping +x changes the artifact hash even when bytes are unchanged. Omitted
+    # entirely when empty, preserving byte-identical hashes for specs with none.
+    if payload_exec:
+        h.update(b"---payload-exec---\n")
+        for dest, executable in sorted(payload_exec):
+            h.update(f"{dest}={int(executable)}\n".encode())
 
     return h.hexdigest()

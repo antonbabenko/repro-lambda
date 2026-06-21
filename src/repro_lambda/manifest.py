@@ -18,6 +18,24 @@ SUPPORTED_PACKAGE_MANAGERS = {"pip", "npm"}
 
 
 @dataclass(frozen=True)
+class ExtraFile:
+    """A prebuilt file or directory staged into the package alongside the source.
+
+    `src` is relative to the repo root (where the caller's CI materialized it, e.g.
+    a downloaded + digest-pinned binary or an extracted release tree). `dest` is
+    where it lands in the package (relative to the package root). For a file,
+    `executable` sets the +x bit; for a directory, source perms are preserved and
+    `executable` is ignored. The bytes fold into the content hash via the staged
+    source tree; the executable flag folds in separately, so flipping it changes
+    the artifact hash even when bytes are unchanged.
+    """
+
+    src: str
+    dest: str
+    executable: bool = False
+
+
+@dataclass(frozen=True)
 class LambdaSpec:
     logical_name: str
     source_dir: str
@@ -30,6 +48,7 @@ class LambdaSpec:
     lambda_at_edge: bool = False
     hash_extra: str = ""
     package_json: str = ""
+    extra_files: tuple[ExtraFile, ...] = ()
 
     @property
     def resolved_requirements_lock(self) -> str:
@@ -61,6 +80,26 @@ class BuilderConfig:
 class Manifest:
     lambdas: list[LambdaSpec]
     builder: BuilderConfig
+
+
+def _parse_extra_files(path: Path, entry: dict) -> tuple[ExtraFile, ...]:
+    """Parse + validate a lambda's optional [[lambda.extra_files]] entries."""
+    parsed: list[ExtraFile] = []
+    for ef in entry.get("extra_files", []):
+        src = ef.get("src", "")
+        dest = ef.get("dest", "")
+        if not src or not dest:
+            raise ValueError(
+                f"{path}: extra_files entry requires non-empty 'src' and 'dest' (got {ef!r})"
+            )
+        for field_name, value in (("src", src), ("dest", dest)):
+            if value.startswith("/") or ".." in Path(value).parts:
+                raise ValueError(
+                    f"{path}: extra_files {field_name}={value!r} must be a relative path "
+                    f"without '..' (src is repo-root-relative, dest is package-root-relative)"
+                )
+        parsed.append(ExtraFile(src=src, dest=dest, executable=bool(ef.get("executable", False))))
+    return tuple(parsed)
 
 
 def load_manifest(path: Path) -> Manifest:
@@ -119,6 +158,8 @@ def load_manifest(path: Path) -> Manifest:
                 f"point it at the lambda's package.json relative to repo root"
             )
 
+        extra_files = _parse_extra_files(path, entry)
+
         lambdas.append(
             LambdaSpec(
                 logical_name=entry["logical_name"],
@@ -132,6 +173,7 @@ def load_manifest(path: Path) -> Manifest:
                 package_manager=pkg,
                 lambda_at_edge=bool(entry.get("lambda_at_edge", False)),
                 hash_extra=entry.get("hash_extra", ""),
+                extra_files=extra_files,
             )
         )
 
