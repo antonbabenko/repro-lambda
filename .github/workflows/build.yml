@@ -117,8 +117,10 @@ jobs:
 
       # Render the dev build's content shas + a copy-paste promotion command per function
       # into the run's Step Summary (the build JSON is otherwise buried in step logs).
+      # NB: the JSON lives in RUNNER_TEMP (outside the workspace), so hashFiles() can't guard
+      # it - run on success() and skip inside the script if the file is somehow absent.
       - name: Build summary (content shas + promote commands)
-        if: ${{ hashFiles(format('{0}/build-summary.json', runner.temp)) != '' }}
+        if: success()
         env:
           SUMMARY_JSON: ${{ runner.temp }}/build-summary.json
           PROMOTION_REPO: ${{ inputs.promotion_repo }}
@@ -129,9 +131,13 @@ jobs:
           SRC_COMMIT: ${{ github.sha }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, sys
 
-          rows = json.load(open(os.environ["SUMMARY_JSON"]))
+          path = os.environ["SUMMARY_JSON"]
+          if not os.path.exists(path):
+              print(f"::notice::no build summary JSON at {path}; skipping summary.")
+              sys.exit(0)
+          rows = json.load(open(path))
           repo = os.environ["PROMOTION_REPO"]
           wf = os.environ["PROMOTION_WORKFLOW"]
           project = os.environ["PROJECT"]
