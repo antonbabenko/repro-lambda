@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.2 - 2026-06-21
+
+### Fixed
+- Pass the full compatible manylinux range to `pip install` instead of a single `--platform`, so compiled wheels are selected for every package. A single explicit `--platform` matches (close to) that exact tag - it does not broaden across baselines - so `manylinux_2_17` silently dropped compiled wheels tagged only at a higher baseline. Concretely, `wrapt`'s cp313 wheel is tagged `manylinux_2_28` (no `2_17`), so pip fell back to the pure-Python `py3-none-any` build; that broke `aws-xray-sdk`'s runtime boto3 patching and 500'd a Lambda whose package included it. The v0.4.1 change (2_28 -> 2_17, to catch `pydantic-core`'s 2_17-only wheel) had created the opposite failure - a single floor cannot satisfy both. Now `docker_runner.py` emits repeated `--platform` flags from `manylinux_2_34` down to `manylinux1` (x86_64) / `manylinux2014` (aarch64), capped at the AL2023 runtime's glibc 2.34, and pip picks the most-specific compiled wheel each package offers, only using `py3-none-any` when no compiled wheel exists. Verified end to end: a real build now ships `wrapt/_wrappers.*.so` again. The builder version bump re-keys all content hashes, as expected.
+
 ## v0.5.1 - 2026-06-21
 
 ### Fixed
