@@ -1,0 +1,85 @@
+name: release
+
+# Automated releases via release-please. On every push to master, release-please
+# maintains a "release PR" that bumps the version (pyproject.toml + __init__.py) and
+# the CHANGELOG. Merging that PR creates the vX.Y.Z tag + GitHub Release, then this
+# same run publishes to PyPI (OIDC) and force-moves the sliding v0 major tag.
+#
+# Why publish here instead of relying on publish.yml's tag trigger: release-please
+# creates the tag via the GitHub API using GITHUB_TOKEN, and a GITHUB_TOKEN-created
+# tag does NOT trigger other workflows. So the publish + major-tag steps run as
+# release_created-gated jobs in this workflow. publish.yml / move-major-tag.yml stay
+# as the manual-tag fallback (a human can still `git tag vX.Y.Z && git push`).
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write        # create the release commit, tag, and GitHub Release
+      pull-requests: write    # open/update the release PR
+      issues: write           # manage the autorelease:* labels
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: master
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write        # PyPI OIDC Trusted Publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8.2.0
+      - run: uv sync --all-extras
+      - name: Verify tag matches package version
+        env:
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          TAG="${TAG_NAME#v}"
+          PKG=$(uv run python -c "import repro_lambda; print(repro_lambda.__version__)")
+          if [[ "$TAG" != "$PKG" ]]; then
+            echo "tag $TAG != package version $PKG" >&2
+            exit 1
+          fi
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  major-tag:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Force-move sliding major tag
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          MAJOR="${TAG%%.*}"   # v0.4.1 -> v0
+          git tag -f "$MAJOR" "$TAG"
+          git push -f origin "refs/tags/$MAJOR"
