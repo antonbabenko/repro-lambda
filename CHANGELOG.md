@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/antonbabenko/repro-lambda/compare/v0.6.0...v0.6.1) (2026-06-22)
+
+
+### Bug Fixes
+
+* **ci:** render the build Step Summary (hashFiles cannot guard a RUNNER_TEMP file) ([#5](https://github.com/antonbabenko/repro-lambda/issues/5)) ([4fadb30](https://github.com/antonbabenko/repro-lambda/commit/4fadb307136f4dffd8c7e6bf5303d79f1a641f5a))
+
 ## v0.5.2 - 2026-06-21
 
 ### Fixed
