@@ -1,0 +1,20 @@
+{
+  "lambdas": {
+    "app": {
+      "current": "9f2a3b4c5d6e7f8091a2b3c4d5e6f7081920a3b4c5d6e7f8091a2b3c4d5e6f70",
+      "history": [
+        {
+          "arch": "arm64",
+          "base_image_digest": "sha256:1b2c3d4e5f60718293a4b5c6d7e8f9001122334455667788990aabbccddeeff0",
+          "builder_version": "0.6.0",
+          "built_at": "2026-06-20T09:30:00Z",
+          "region": "eu-west-1",
+          "runtime": "python3.13",
+          "sha256": "9f2a3b4c5d6e7f8091a2b3c4d5e6f7081920a3b4c5d6e7f8091a2b3c4d5e6f70",
+          "source_commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9001122334"
+        }
+      ]
+    }
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,26 @@
+# repro-lambda manifest for the "complete" example.
+#
+# repro-lambda reads this file to build and upload Lambda artifacts to S3
+# OUTSIDE of Terraform. Run `repro-lambda build --bucket <bucket>` to build
+# every [[lambda]] below; see ../../SETUP.md for the CI workflow.
+
+[[lambda]]
+logical_name      = "app"
+source_dir        = "src/app"
+requirements_lock = "src/app/requirements.${arch}.lock"
+runtime           = "python3.13"
+arch              = "arm64"
+handler           = "app.lambda_handler"
+region            = "eu-west-1"
+package_manager   = "pip"
+lambda_at_edge    = false
+hash_extra        = ""
+
+[builder]
+# Pin base_image_python to a specific digest - never a floating tag in production.
+# Get the digest with:
+#   docker pull public.ecr.aws/lambda/python:3.13
+#   docker inspect --format='{{index .RepoDigests 0}}' public.ecr.aws/lambda/python:3.13
+base_image_python = "public.ecr.aws/lambda/python:3.13@sha256:<pinned-digest>"
+include_patterns  = ["**/*.py", "**/*.json"]
+exclude_patterns  = [".venv/**", "__pycache__/**", "*.pyc", ".git/**", ".env*"]
