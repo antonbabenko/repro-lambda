@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/antonbabenko/repro-lambda/compare/v0.6.1...v0.7.0) (2026-06-23)
+
+
+### Features
+
+* support the python3.14 lambda runtime ([#9](https://github.com/antonbabenko/repro-lambda/issues/9)) ([c3fcd8c](https://github.com/antonbabenko/repro-lambda/commit/c3fcd8ceb400891e152293ba06ada747aaa21f9f))
+
 ## [0.6.1](https://github.com/antonbabenko/repro-lambda/compare/v0.6.0...v0.6.1) (2026-06-22)
 
 
