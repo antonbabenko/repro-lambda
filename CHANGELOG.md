@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/antonbabenko/repro-lambda/compare/v0.7.1...v0.7.2) (2026-06-23)
+
+
+### Documentation
+
+* add social preview image ([b6e0707](https://github.com/antonbabenko/repro-lambda/commit/b6e07070320d1a08989057ebed2c632b4c65a2f1))
+
 ## [0.7.1](https://github.com/antonbabenko/repro-lambda/compare/v0.7.0...v0.7.1) (2026-06-23)
 
 
