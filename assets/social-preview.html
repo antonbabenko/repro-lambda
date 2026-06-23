@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<!-- Regenerate PNG (run from repo root):
+     npx -y playwright screenshot --viewport-size=1280,640 \
+       "file://$(pwd)/assets/social-preview.html" assets/social-preview.png -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Social preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #faf9ff;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .card {
+    width: 1280px;
+    height: 640px;
+    position: relative;
+    border: 1px solid #e9e5f5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 70px;
+  }
+  .top-block { margin-bottom: 48px; }
+  .accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 9px;
+    background: #7B42BC;
+  }
+  .top-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  .owner {
+    font-size: 24px;
+    font-weight: 500;
+    color: #9ca3af;
+    margin-bottom: 36px;
+    letter-spacing: 0.01em;
+  }
+  .owner-repo {
+    color: #7c3aed;
+    font-weight: 600;
+  }
+  .title {
+    font-size: 84px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    margin-bottom: 36px;
+    text-align: center;
+  }
+  .subtitle {
+    font-size: 26px;
+    font-weight: 400;
+    color: #4b5563;
+    line-height: 1.45;
+    max-width: 1080px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .mono {
+    font-family: 'SFMono-Regular', ui-monospace, 'Menlo', 'Consolas', monospace;
+    font-size: 23px;
+    color: #6d28d9;
+  }
+  .meta {
+    font-size: 21px;
+    font-weight: 500;
+    color: #6b7280;
+    line-height: 1.4;
+    max-width: 1080px;
+    text-align: center;
+    letter-spacing: 0;
+  }
+  .meta-sep {
+    color: #cbd5e1;
+    margin: 0 10px;
+    font-weight: 400;
+  }
+  .tags {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    flex-wrap: nowrap;
+  }
+  .tag {
+    padding: 11px 24px;
+    border-radius: 9999px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+  }
+  .tag-terraform  { background: #ede9fe; color: #6d28d9; }
+  .tag-aws        { background: #e0e7ff; color: #4338ca; }
+  .tag-lambda     { background: #dbeafe; color: #1d4ed8; }
+  .tag-repro      { background: #ccfbf1; color: #0f766e; }
+  .tag-serverless { background: #dcfce7; color: #15803d; }
+  .tag-s3         { background: #fae8ff; color: #a21caf; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="accent"></div>
+  <div class="top-block">
+    <div class="owner">antonbabenko <span class="owner-repo">/ repro-lambda</span></div>
+    <h1 class="title">repro-lambda</h1>
+    <p class="subtitle">Build AWS Lambda packages outside Terraform that come out byte-for-byte identical on macOS and in CI. Upload to S3 by content hash, then let Terraform read <span class="mono">s3_existing_package</span> instead of rebuilding on every plan.</p>
+    <p class="meta"><span>Byte-identical zips</span><span class="meta-sep">·</span><span>Content-hash S3 keys</span><span class="meta-sep">·</span><span>macOS + Linux</span><span class="meta-sep">·</span><span>Terraform-native</span><span class="meta-sep">·</span><span>Python &amp; Node runtimes</span></p>
+  </div>
+  <div class="tags">
+    <span class="tag tag-terraform">terraform</span>
+    <span class="tag tag-aws">aws</span>
+    <span class="tag tag-lambda">lambda</span>
+    <span class="tag tag-repro">reproducible-builds</span>
+    <span class="tag tag-serverless">serverless</span>
+    <span class="tag tag-s3">s3</span>
+  </div>
+</div>
+</body>
+</html>
