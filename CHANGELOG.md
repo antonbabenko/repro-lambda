@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/antonbabenko/repro-lambda/compare/v0.7.0...v0.7.1) (2026-06-23)
+
+
+### Documentation
+
+* split SETUP into SETUP+USAGE, add runnable terraform example, restructure README ([#11](https://github.com/antonbabenko/repro-lambda/issues/11)) ([768ebda](https://github.com/antonbabenko/repro-lambda/commit/768ebda07aefa51cc15c0a5b52adbd251b7891d2))
+
 ## [0.7.0](https://github.com/antonbabenko/repro-lambda/compare/v0.6.1...v0.7.0) (2026-06-23)
 
 
