@@ -45,6 +45,24 @@ def test_load_manifest_rejects_unknown_runtime(tmp_path: Path):
         load_manifest(bad)
 
 
+def test_load_manifest_accepts_python314(tmp_path: Path):
+    ok = tmp_path / "lambdas.toml"
+    ok.write_text(
+        "[[lambda]]\n"
+        'logical_name = "app"\n'
+        'source_dir = "app"\n'
+        'requirements_lock = "app/requirements.arm64.lock"\n'
+        'runtime = "python3.14"\n'
+        'arch = "arm64"\n'
+        'handler = "app.lambda_handler"\n'
+        "\n"
+        "[builder]\n"
+        'base_image_python = "public.ecr.aws/lambda/python:3.14@sha256:' + "0" * 64 + '"\n'
+    )
+    manifest = load_manifest(ok)
+    assert manifest.lambdas[0].runtime == "python3.14"
+
+
 def test_load_manifest_rejects_unknown_arch(tmp_path: Path):
     bad = tmp_path / "lambdas.toml"
     bad.write_text(
