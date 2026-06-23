@@ -4,7 +4,7 @@ version = "0.6.0"
 description = "Build reproducible AWS Lambda packages outside Terraform, optimized for terraform-aws-lambda by serverless.tf."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 authors = [{ name = "Anton Babenko", email = "anton@antonbabenko.com" }]
 keywords = ["aws", "lambda", "terraform", "reproducible-builds", "serverless"]
 classifiers = [
@@ -12,7 +12,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "License :: OSI Approved :: Apache Software License",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: POSIX :: Linux",
   "Operating System :: MacOS :: MacOS X",
   "Topic :: Software Development :: Build Tools",

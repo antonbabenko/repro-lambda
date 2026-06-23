@@ -61,3 +61,11 @@ A self-contained consumer setup: manifest, catalog, and Terraform using
 - [What this example shows](./examples/complete/README.md#what-this-example-shows) - files and layout
 - [The build-outside-Terraform flow](./examples/complete/README.md#the-build-outside-terraform-flow) - build, inspect the catalog, apply
 - [Expected plan diff](./examples/complete/README.md#expected-plan-diff) - the `s3_key`-only diff to expect
+
+## License
+
+MIT - see [LICENSE](./LICENSE).
+
+## Author
+
+Anton Babenko - [@antonbabenko](https://twitter.com/antonbabenko) on Twitter, [antonbabenko](https://www.linkedin.com/in/antonbabenko/) on LinkedIn.
