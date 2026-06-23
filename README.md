@@ -11,32 +11,53 @@ instead of building during `terraform plan`/`apply`.
 
     pip install repro-lambda
 
-## Usage
+## Quick start
 
-    repro-lambda init           # scaffold lambdas.toml and CI caller workflow
-    repro-lambda lock           # regenerate per-arch lockfiles
-    repro-lambda build          # build all lambdas in lambdas.toml, upload to S3
-    repro-lambda build --verify # two-pass byte-reproducibility check
+    repro-lambda lock                     # regenerate per-arch requirement + source locks
+    repro-lambda build --bucket <bucket>  # build all lambdas in lambdas.toml, upload to S3
+    repro-lambda build --verify --dry-run # two-pass byte-reproducibility check (no upload)
+    repro-lambda promote \
+      --dev-bucket <dev> --prod-bucket <prod>  # copy dev -> prod by content sha (no rebuild)
 
-See `docs/` for full design.
+`--bucket` (or `REPRO_LAMBDA_BUCKET`) is required for a real build; add
+`--dry-run` to build without uploading. There is no `init` command yet (the
+subcommand is currently a stub).
 
-## Release
+## Documentation
 
-Releases are tag-driven. To cut v0.2.1:
+What each document covers, by section:
 
-    git tag v0.2.1
-    git push origin v0.2.1
+### Setup - one-time AWS provisioning ([SETUP.md](./SETUP.md))
 
-The `publish.yml` workflow uses PyPI Trusted Publishing (OIDC) — no PyPI token
-needed in repo secrets. Configure once via PyPI's "Publishing" panel:
+Provision the supporting infrastructure once per AWS account and environment.
 
-- Owner: `antonbabenko`
-- Repository: `repro-lambda`
-- Workflow: `publish.yml`
-- Environment: (leave blank)
+- [Architecture](./SETUP.md#architecture) - artifact buckets, key-level immutability, the content-hash model
+- [Terraform - per-account bootstrap](./SETUP.md#terraform---per-account-bootstrap) - the buckets, the GitHub OIDC builder role, and outputs
+- [GitHub OIDC provider](./SETUP.md#github-oidc-provider) - declaring the shared per-account OIDC provider
+- [Next steps](./SETUP.md#next-steps) - where to go after provisioning
 
-## Setup
+### Usage - day-to-day ([USAGE.md](./USAGE.md))
 
-See [SETUP.md](./SETUP.md) for a copy-paste-able guide to provisioning the
-S3 buckets, IAM OIDC role, and CI workflow needed to use `repro-lambda` in
-your project.
+Using `repro-lambda` once the infrastructure exists.
+
+- [Source-repo CI workflow](./USAGE.md#source-repo-ci-workflow) - wiring the reusable build workflow into CI/CD
+- [Per-Lambda manifest](./USAGE.md#per-lambda-manifest) - the `lambdas.toml` fields
+  - [Per-lambda builder overrides](./USAGE.md#per-lambda-builder-overrides) - per-lambda base image and file filters
+- [Declarative sources](./USAGE.md#declarative-sources---lambdasource) - pinned external artifacts via `[[lambda.source]]`
+- [Terraform consumer (`s3_existing_package`)](./USAGE.md#terraform-consumer---s3_existing_package) - wiring `terraform-aws-modules/lambda/aws` to the built artifact
+- [Smoke test](./USAGE.md#smoke-test) - first-build verification and the clean migration plan diff
+- [Troubleshooting](./USAGE.md#troubleshooting) - upload 403s, `PreconditionFailed`, noisy plans
+- [Node.js (npm) Lambdas](./USAGE.md#nodejs-npm-lambdas) - npm packaging support
+  - [Manifest fields for npm specs](./USAGE.md#manifest-fields-for-npm-specs)
+  - [Lockfile regeneration](./USAGE.md#lockfile-regeneration)
+- [Lambda@Edge example](./USAGE.md#lambdaedge-example) - `us-east-1` artifacts for CloudFront
+- [Caveats](./USAGE.md#caveats) - npm workspaces, native deps, symlinks
+
+### Example - runnable ([examples/complete/](./examples/complete/))
+
+A self-contained consumer setup: manifest, catalog, and Terraform using
+`terraform-aws-modules/lambda/aws`.
+
+- [What this example shows](./examples/complete/README.md#what-this-example-shows) - files and layout
+- [The build-outside-Terraform flow](./examples/complete/README.md#the-build-outside-terraform-flow) - build, inspect the catalog, apply
+- [Expected plan diff](./examples/complete/README.md#expected-plan-diff) - the `s3_key`-only diff to expect

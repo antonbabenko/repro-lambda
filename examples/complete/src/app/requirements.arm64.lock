@@ -1,0 +1,3 @@
+# Locked dependencies for the "app" lambda (arm64).
+# Regenerate with `repro-lambda lock` (uv pip compile under the hood).
+# This example has no third-party dependencies, so the lock is intentionally empty.

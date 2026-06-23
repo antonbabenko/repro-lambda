@@ -363,7 +363,7 @@ def _lock_requirements(parsed, repo_root: Path) -> None:
 
 @app.command()
 def init() -> None:
-    """Scaffold lambdas.toml and CI caller workflow."""
+    """Not yet implemented (stub). Will scaffold lambdas.toml and a CI caller workflow."""
     typer.echo("init stub")
     raise typer.Exit(0)
 
