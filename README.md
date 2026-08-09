@@ -1,3 +1,5 @@
+
+
 # repro-lambda
 
 Build reproducible AWS Lambda packages outside Terraform, optimized for
@@ -9,7 +11,7 @@ instead of building during `terraform plan`/`apply`.
 
 ## Install
 
-    pip install repro-lambda
+    uv tool install repro-lambda
 
 ## Quick start
 
