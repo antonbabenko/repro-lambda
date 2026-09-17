@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from repro_lambda.sources import (
     extract_to_temp,
 )
 
-_MAX_VERSION_FILE_BYTES = 1024 * 1024  # an asdf .tool-versions is tiny; cap to be safe
+_MAX_VERSION_FILE_BYTES = 1024 * 1024  # a pin file is tiny; cap to be safe
 
 
 @dataclass
@@ -35,13 +36,18 @@ class SourcePin:
     changed: bool
 
 
-def _read_asdf_version(path: Path, key: str) -> str:
-    """Read `<key> <value>` from an asdf-style file (e.g. .tool-versions)."""
+def _read_pin_file(path: Path) -> str:
+    """Read a version_from pin file, with the guards both readers share."""
     if not path.is_file():
         raise SourceFetchError(f"version_from file not found: {path}")
     if path.stat().st_size > _MAX_VERSION_FILE_BYTES:
         raise SourceFetchError(f"version_from file too large: {path}")
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    return path.read_text(encoding="utf-8")
+
+
+def _read_asdf_version(path: Path, key: str) -> str:
+    """Read `<key> <value>` from an asdf-style file (e.g. .tool-versions)."""
+    for raw in _read_pin_file(path).splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
@@ -49,6 +55,44 @@ def _read_asdf_version(path: Path, key: str) -> str:
         if len(parts) >= 2 and parts[0] == key:
             return parts[1]
     raise SourceFetchError(f"key {key!r} not found in {path.name}")
+
+
+def _mise_version(spec: object) -> str:
+    """The pinned version of one `[tools]` entry, or "" when it pins none.
+
+    mise accepts a bare string, a table/inline table with `version`, or a list of
+    versions (first wins). An entry with only e.g. `bin_path` pins nothing.
+    """
+    if isinstance(spec, str):
+        return spec
+    if isinstance(spec, dict):
+        version = spec.get("version")
+        return version if isinstance(version, str) else ""
+    if isinstance(spec, list):
+        return next((v for v in spec if isinstance(v, str)), "")
+    return ""
+
+
+def _read_mise_version(path: Path, key: str) -> str:
+    """Read a tool version from a mise config's `[tools]` table.
+
+    `key` matches either the full tool key or its short name, so
+    "aqua:hashicorp/terraform" and "http:hcledit" both resolve as "terraform"/"hcledit".
+    """
+    try:
+        tools = tomllib.loads(_read_pin_file(path)).get("tools", {})
+    except tomllib.TOMLDecodeError as exc:
+        raise SourceFetchError(f"version_from file is not valid TOML: {path} ({exc})") from exc
+    for raw_key, spec in tools.items():
+        if key not in (raw_key, raw_key.split(":", 1)[-1].split("/")[-1]):
+            continue
+        version = _mise_version(spec)
+        if version:
+            return version
+    raise SourceFetchError(f"key {key!r} not found in {path.name}")
+
+
+_VERSION_READERS = {"mise": _read_mise_version, "asdf": _read_asdf_version}
 
 
 def _ordered(sources: tuple[Source, ...]) -> list[Source]:
@@ -80,12 +124,13 @@ def _lock_lambda_sources(
                     f"(it must declare an archive extract)"
                 )
             # Read relative to the referenced source's member-stripped tree, so file= can
-            # be e.g. ".tool-versions" rather than the version-dependent "pofix-9.9/...".
+            # be e.g. "mise.toml" rather than the version-dependent "pofix-9.9/...".
             base = extracted[ref]
             ref_member = src_by_name[ref].resolved_member
             if ref_member:
                 base = base / ref_member
-            version = _read_asdf_version(base / src.version_from.file, src.version_from.key)
+            read = _VERSION_READERS[src.version_from.format]
+            version = read(base / src.version_from.file, src.version_from.key)
         resolved = replace(src, version=version)
 
         raw = tmp / f"lock-{src.name}"
