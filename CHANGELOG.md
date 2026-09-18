@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/antonbabenko/repro-lambda/compare/v0.7.2...v0.8.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **lock:** `version_from` defaults to `format = "mise"`. A manifest that reads a `.tool-versions` file must now declare `format = "asdf"`.
+
+### Features
+
+* **lock:** read version_from pins from mise.toml by default ([#15](https://github.com/antonbabenko/repro-lambda/issues/15)) ([a9258af](https://github.com/antonbabenko/repro-lambda/commit/a9258af92fa29227b3c040cc8d7867e8739c3648))
+
 ## [0.7.2](https://github.com/antonbabenko/repro-lambda/compare/v0.7.1...v0.7.2) (2026-06-23)
 
 
