@@ -38,6 +38,7 @@ class ExtraFile:
 
 SUPPORTED_SOURCE_TYPES = {"github_release", "https"}
 SUPPORTED_EXTRACT = {"zip", "tar.gz", "none"}
+SUPPORTED_VERSION_FORMATS = {"mise", "asdf"}
 
 
 @dataclass(frozen=True)
@@ -45,15 +46,21 @@ class VersionFrom:
     """Lock-time version resolution rule for a source (never hashed).
 
     At `lock` time the referenced source (`source`, by name) is fetched + extracted,
-    the asdf-style `<key> <value>` line is read from `file` (relative to that source's
-    extracted tree), and the value re-pins this source's `version`. `build` never
-    resolves this - it substitutes the already-locked `version` into the url/tag/asset
-    templates. Single-level only: the referenced source may not itself use version_from.
+    `file` is read from that source's extracted tree, and the version it gives for
+    `key` re-pins this source's `version`. `build` never resolves this - it substitutes
+    the already-locked `version` into the url/tag/asset templates. Single-level only:
+    the referenced source may not itself use version_from.
+
+    `format` selects the reader. The default `mise` parses a mise config's `[tools]`
+    table, matching `key` against either the full tool key or its short name
+    ("aqua:hashicorp/terraform" -> "terraform"). `asdf` reads a `<key> <value>` line
+    from a .tool-versions file.
     """
 
     source: str
     file: str
     key: str
+    format: str = "mise"
 
 
 @dataclass(frozen=True)
@@ -323,8 +330,17 @@ def _parse_sources(path: Path, entry: dict) -> tuple[Source, ...]:
                     f"{path}: source {name!r} version_from.source cannot reference itself"
                 )
             _validate_relpath(path, "version_from.file", vf_raw["file"], where=f"source {name!r}")
+            vf_format = vf_raw.get("format", "mise")
+            if vf_format not in SUPPORTED_VERSION_FORMATS:
+                raise ValueError(
+                    f"{path}: source {name!r} version_from.format={vf_format!r} is not one of "
+                    f"{sorted(SUPPORTED_VERSION_FORMATS)}"
+                )
             version_from = VersionFrom(
-                source=vf_raw["source"], file=vf_raw["file"], key=vf_raw["key"]
+                source=vf_raw["source"],
+                file=vf_raw["file"],
+                key=vf_raw["key"],
+                format=vf_format,
             )
 
         uses_template = any("{version}" in v for v in (url, tag, asset, member or ""))

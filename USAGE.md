@@ -119,7 +119,7 @@ member  = "vendor-{version}"   # map the versioned top dir to dest
 dest    = "vendor"
 version = "1.4.0"              # bump this one line; lock re-pins everything
 
-# A public binary whose version is derived from the vendor release's .tool-versions.
+# A public binary whose version is derived from the vendor release's mise.toml.
 [[lambda.source]]
 name    = "terraform"
 type    = "https"
@@ -131,18 +131,23 @@ dest    = "bin/terraform"
 executable = true
 version = "1.9.0"
 [lambda.source.version_from]
-source = "vendor"          # read from the vendor source's extracted tree
-file   = ".tool-versions"  # relative to its member-stripped root
-key    = "terraform"
+source = "vendor"       # read from the vendor source's extracted tree
+file   = "mise.toml"    # relative to its member-stripped root
+key    = "terraform"    # full tool key or its short name
+# format = "asdf"       # optional; default "mise"
 ```
 
 - **Pinning.** `sha256` is verified before the archive is opened. `extract` is
   `zip` / `tar.gz` / `none`. `member` extracts one file or a directory subtree to
   `dest`; omit it to extract the whole archive under `dest`. Source names are
   unique per lambda and dests may not overlap each other or the staged source.
-- **`version_from`** (single-level) derives a source's `version` from an asdf-style
-  `key value` line in another source's file, so bumping the root `version`
-  cascades to dependents. It is a lock input - it never affects the artifact hash.
+- **`version_from`** (single-level) derives a source's `version` from a pin file in
+  another source's extracted tree, so bumping the root `version` cascades to
+  dependents. It is a lock input - it never affects the artifact hash. `format`
+  picks the reader: the default `mise` parses a mise config's `[tools]` table and
+  matches `key` against the full tool key or its short name
+  (`aqua:hashicorp/terraform` resolves as `terraform`); `asdf` reads a
+  `key value` line from a `.tool-versions` file.
 - **`repro-lambda lock`** re-resolves `version_from`, re-downloads, recomputes each
   `sha256`, and rewrites this file (comment-preserving, atomic, idempotent). Run it
   after bumping a `version`. Pass `REPRO_LAMBDA_SOURCES_TOKEN` for private

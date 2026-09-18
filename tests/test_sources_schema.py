@@ -92,11 +92,43 @@ def test_parse_version_from_and_substitution(tmp_path: Path):
         'url="https://releases.example.com/terraform_{version}_linux_arm64.zip"\n'
         f'sha256="{SHA2}"\nextract="zip"\nmember="terraform"\ndest="bin/terraform"\n'
         'version="1.9.0"\n'
-        '[lambda.source.version_from]\nsource="pofix"\nfile=".tool-versions"\nkey="terraform"\n',
+        '[lambda.source.version_from]\nsource="pofix"\nfile="mise.toml"\nkey="terraform"\n',
     )
     tf = sources[1]
-    assert tf.version_from == VersionFrom(source="pofix", file=".tool-versions", key="terraform")
+    # format defaults to mise.
+    assert tf.version_from == VersionFrom(source="pofix", file="mise.toml", key="terraform")
+    assert tf.version_from.format == "mise"
     assert tf.resolved_url == "https://releases.example.com/terraform_1.9.0_linux_arm64.zip"
+
+
+def test_version_from_asdf_format_opt_in(tmp_path: Path):
+    sources = _load(
+        tmp_path,
+        "[[lambda.source]]\n"
+        'name="pofix"\ntype="github_release"\nrepo="o/pofix"\ntag="pofix-v0.10.0"\n'
+        f'asset="pofix-0.10.0.tar.gz"\nsha256="{SHA}"\nextract="tar.gz"\ndest="pofix"\n'
+        "[[lambda.source]]\n"
+        'name="tf"\ntype="https"\nurl="https://releases.example.com/tf.zip"\n'
+        f'sha256="{SHA2}"\nextract="zip"\nmember="terraform"\ndest="bin/terraform"\n'
+        "[lambda.source.version_from]\n"
+        'source="pofix"\nfile=".tool-versions"\nformat="asdf"\nkey="terraform"\n',
+    )
+    assert sources[1].version_from.format == "asdf"
+
+
+def test_version_from_rejects_unknown_format(tmp_path: Path):
+    with pytest.raises(ValueError, match="version_from.format"):
+        _load(
+            tmp_path,
+            "[[lambda.source]]\n"
+            'name="pofix"\ntype="github_release"\nrepo="o/pofix"\ntag="pofix-v0.10.0"\n'
+            f'asset="pofix-0.10.0.tar.gz"\nsha256="{SHA}"\nextract="tar.gz"\ndest="pofix"\n'
+            "[[lambda.source]]\n"
+            'name="tf"\ntype="https"\nurl="https://releases.example.com/tf.zip"\n'
+            f'sha256="{SHA2}"\nextract="zip"\nmember="terraform"\ndest="bin/terraform"\n'
+            "[lambda.source.version_from]\n"
+            'source="pofix"\nfile="tool.json"\nformat="json"\nkey="terraform"\n',
+        )
 
 
 def test_sources_default_empty(tmp_path: Path):
