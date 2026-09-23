@@ -358,6 +358,60 @@ def test_github_source_requires_token(tmp_path: Path):
         sources._github_asset_url(src, None)
 
 
+def _gh_src() -> Source:
+    return Source(
+        name="p",
+        type="github_release",
+        sha256=SHA_PLACEHOLDER,
+        extract="tar.gz",
+        dest="p",
+        repo="o/r",
+        tag="t",
+        asset="a.tgz",
+    )
+
+
+def test_github_asset_falls_back_to_assets_endpoint(monkeypatch):
+    # GitHub can serve releases/tags/<tag> with a stale, empty `assets` list right after
+    # an upload, while /releases/{id}/assets already lists the file.
+    calls = []
+
+    def fake_get(url, headers):
+        calls.append(url)
+        if url.endswith("/releases/tags/t"):
+            return {"id": 7, "assets": []}
+        assert url.endswith("/releases/7/assets?per_page=100")
+        return [{"name": "other", "id": 1}, {"name": "a.tgz", "id": 42}]
+
+    monkeypatch.setattr(sources, "_http_get_json", fake_get)
+    url, headers = sources._github_asset_url(_gh_src(), "tok")
+    assert url.endswith("/repos/o/r/releases/assets/42")
+    assert headers["Accept"] == "application/octet-stream"
+    assert len(calls) == 2
+
+
+def test_github_asset_embedded_list_needs_no_second_call(monkeypatch):
+    calls = []
+
+    def fake_get(url, headers):
+        calls.append(url)
+        return {"id": 7, "assets": [{"name": "a.tgz", "id": 42}]}
+
+    monkeypatch.setattr(sources, "_http_get_json", fake_get)
+    url, _ = sources._github_asset_url(_gh_src(), "tok")
+    assert url.endswith("/releases/assets/42")
+    assert len(calls) == 1
+
+
+def test_github_asset_missing_everywhere_raises(monkeypatch):
+    def fake_get(url, headers):
+        return {"id": 7, "assets": []} if url.endswith("/tags/t") else []
+
+    monkeypatch.setattr(sources, "_http_get_json", fake_get)
+    with pytest.raises(SourceFetchError, match="not found"):
+        sources._github_asset_url(_gh_src(), "tok")
+
+
 # --- staging + end-to-end (no network) -------------------------------------
 
 

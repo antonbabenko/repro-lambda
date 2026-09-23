@@ -34,6 +34,7 @@ import tempfile
 import zipfile
 from http.client import HTTPSConnection
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from repro_lambda import __version__
@@ -183,7 +184,7 @@ def _stream_to(resp, sink: io.BufferedWriter, max_bytes: int) -> str:
     return h.hexdigest()
 
 
-def _http_get_json(url: str, headers: dict[str, str]) -> dict:
+def _http_get_json(url: str, headers: dict[str, str]) -> Any:
     buf = io.BytesIO()
     writer = io.BufferedWriter(_RawSink(buf))
     _http_request(url, headers, writer, _JSON_MAX_BYTES)
@@ -219,7 +220,15 @@ def _github_asset_url(src: Source, token: str | None) -> tuple[str, dict[str, st
     auth = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     release = _http_get_json(api, auth)
     want = src.resolved_asset
-    for asset in release.get("assets", []):
+    assets = release.get("assets", [])
+    if not any(a.get("name") == want for a in assets) and "id" in release:
+        # The tag view can serve a stale, empty `assets` list for a while after an
+        # upload; the per-release assets endpoint is current.
+        # ponytail: first 100 assets only, paginate if a release ever carries more.
+        assets = _http_get_json(
+            f"{_GITHUB_API}/repos/{src.repo}/releases/{release['id']}/assets?per_page=100", auth
+        )
+    for asset in assets:
         if asset.get("name") == want:
             asset_id = asset["id"]
             dl = f"{_GITHUB_API}/repos/{src.repo}/releases/assets/{asset_id}"
