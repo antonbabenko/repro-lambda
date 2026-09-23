@@ -32,6 +32,23 @@ Once an artifact with a content-hash key (`lambdas/<name>/<sha256>.zip`) is
 uploaded, the key is permanently bound to those bytes. `repro-lambda` treats
 HTTP 412 PreconditionFailed on a duplicate upload as success.
 
+The key hashes the build inputs (staged source, requirements lock, spec, base
+image, filters, sources) plus a builder hash contract. It does not hash the
+repro-lambda package version, so upgrading repro-lambda keeps every existing key
+unless the release changes the packaged bytes, in which case it bumps
+`HASH_CONTRACT` in `hasher.py` and says so in its changelog entry.
+`tests/test_hash_contract.py` fingerprints the packaging modules, so a change to
+them fails CI until the contract is reviewed.
+
+`--verify` builds twice and compares the two results; it does not compare against
+the object already in S3. On a cache hit the build catalog records
+`hash-contract:<value>` as the builder, because the running version did not
+build that object.
+
+Releases up to 0.8.1 folded the package version into the key, so 0.8.1 would mint
+keys of its own. 0.8.2 returns to the keys 0.8.0 minted. If a pin was taken from a
+0.8.1 build, it moves back to the 0.8.0 key on the next build, with identical bytes.
+
 ## Terraform - per-account bootstrap
 
 The Terraform below assumes you already have a configured AWS provider in the

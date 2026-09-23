@@ -11,7 +11,7 @@ from pathlib import Path
 from repro_lambda import __version__
 from repro_lambda.catalog import Catalog, CatalogEntry
 from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
-from repro_lambda.hasher import compute_content_hash
+from repro_lambda.hasher import HASH_CONTRACT, compute_content_hash
 from repro_lambda.manifest import BuilderConfig, LambdaSpec, resolve_builder
 from repro_lambda.s3_uploader import S3Uploader, UploadResult
 from repro_lambda.source_stager import stage_source
@@ -83,7 +83,7 @@ def compute_sha_for(
             requirements_lock=lock_path,
             spec=spec,
             base_image=primary_base_image,
-            builder_version=__version__,
+            builder_version=HASH_CONTRACT,
             extra_files=extras,
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
             include_patterns=builder.include_patterns,
@@ -130,7 +130,7 @@ def build_one(
             requirements_lock=lock_path,
             spec=spec,
             base_image=primary_base_image,
-            builder_version=__version__,
+            builder_version=HASH_CONTRACT,
             extra_files=extras,
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
             include_patterns=builder.include_patterns,
@@ -144,7 +144,7 @@ def build_one(
 
         uploader = S3Uploader(region=spec.region)
         if uploader.exists(bucket=target_bucket, key=bucket_key):
-            _record(catalog, spec, sha, source_commit, builder)
+            _record(catalog, spec, sha, source_commit, builder, built=False)
             return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
 
         # Cache miss only: fetch + verify + extract declarative sources into the staged
@@ -182,7 +182,7 @@ def build_one(
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}
-        _record(catalog, spec, sha, source_commit, builder)
+        _record(catalog, spec, sha, source_commit, builder, built=True)
         return BuildOutcome(BuildResult.BUILT_AND_UPLOADED, sha, bucket_key)
 
 
@@ -192,6 +192,8 @@ def _record(
     sha: str,
     source_commit: str,
     builder: BuilderConfig,
+    *,
+    built: bool,
 ) -> None:
     if spec.package_manager == "npm":
         primary_image = builder.base_image_nodejs
@@ -205,7 +207,9 @@ def _record(
             runtime=spec.runtime,
             arch=spec.arch,
             region=spec.region,
-            builder_version=__version__,
+            # A cache hit did not build the object, and the key no longer carries the
+            # package version, so only the hash contract is known to match it.
+            builder_version=__version__ if built else f"hash-contract:{HASH_CONTRACT}",
             base_image_digest=primary_image.split("@", 1)[-1],
             built_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         ),
