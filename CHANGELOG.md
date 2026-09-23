@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/antonbabenko/repro-lambda/compare/v0.8.0...v0.8.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **sources:** fall back to the release assets endpoint when the tag view lists none ([#17](https://github.com/antonbabenko/repro-lambda/issues/17)) ([3a5608b](https://github.com/antonbabenko/repro-lambda/commit/3a5608b8cd7294f66986b1a61e4607efd052163a))
+
 ## [0.8.0](https://github.com/antonbabenko/repro-lambda/compare/v0.7.2...v0.8.0) (2026-09-18)
 
 
