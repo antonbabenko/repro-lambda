@@ -45,9 +45,9 @@ the object already in S3. On a cache hit the build catalog records
 `hash-contract:<value>` as the builder, because the running version did not
 build that object.
 
-Keys changed once, in 0.8.2: releases up to 0.8.1 folded the package version, so
-0.8.1 minted keys of its own. 0.8.2 returns to the keys 0.8.0 minted. A pin taken
-from a 0.8.1 build moves back on the next build, with identical bytes.
+Releases up to 0.8.1 folded the package version into the key, so 0.8.1 would mint
+keys of its own. 0.8.2 returns to the keys 0.8.0 minted. If a pin was taken from a
+0.8.1 build, it moves back to the 0.8.0 key on the next build, with identical bytes.
 
 ## Terraform - per-account bootstrap
 

@@ -19,6 +19,7 @@ PACKAGING_FINGERPRINTS = {
         "zip_packager.py": "56810a5e337a2fd5f72c269ba81bab06ca2f019e14e0edb728d6c37881d7cf0a",
         "docker_runner.py": "0092a103b8dd11e6c0a00979e4c38272ccc6d707f2ee74035d8d84e61fed4988",
         "source_stager.py": "38186277fb94ab6feac8a07cad2ae35f5adfaa52bde3d51ac71daccb003d3c68",
+        "sources.py": "10415ccc89b85f521fb64ef199f084f0bea1842032d414cb3d3537334f6caa0b",
     },
 }
 
