@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/antonbabenko/repro-lambda/compare/v0.8.1...v0.8.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **hasher:** stop re-keying artifacts on every repro-lambda release ([#19](https://github.com/antonbabenko/repro-lambda/issues/19)) ([44a263a](https://github.com/antonbabenko/repro-lambda/commit/44a263a560d6d7d3504a1365c4d2dac9c4dbad4f))
+
 ## [0.8.1](https://github.com/antonbabenko/repro-lambda/compare/v0.8.0...v0.8.1) (2026-09-23)
 
 
