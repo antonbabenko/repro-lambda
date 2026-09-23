@@ -72,7 +72,7 @@ ZIP_EXCLUDES = {
 def test_zip_excludes_match_the_hash_contract():
     from repro_lambda.cli import _LAMBDA_ZIP_EXCLUDES
 
-    assert _LAMBDA_ZIP_EXCLUDES == ZIP_EXCLUDES.get(HASH_CONTRACT), (
+    assert ZIP_EXCLUDES.get(HASH_CONTRACT) == _LAMBDA_ZIP_EXCLUDES, (
         "the lambda zip exclusion list changed: bump HASH_CONTRACT in hasher.py "
         "and record the new list under the contract"
     )
