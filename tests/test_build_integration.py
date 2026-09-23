@@ -7,6 +7,7 @@ from moto import mock_aws
 
 from repro_lambda.build import BuildResult, build_one, compute_sha_for
 from repro_lambda.catalog import Catalog
+from repro_lambda.hasher import HASH_CONTRACT
 from repro_lambda.manifest import BuilderConfig, LambdaSpec
 
 
@@ -84,6 +85,8 @@ def test_build_one_cache_hit_skips_docker_and_returns_existing_sha(
     assert outcome.sha256 == sha
     mock_docker.assert_not_called()
     assert catalog.lambdas["app"].current == sha
+    # This process did not build the object; claim only the hash contract.
+    assert catalog.lambdas["app"].history[0].builder_version == f"hash-contract:{HASH_CONTRACT}"
 
 
 def test_build_one_cache_miss_runs_docker_uploads_and_records(git_repo_with_sample: Path, mocker):

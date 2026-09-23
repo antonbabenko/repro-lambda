@@ -10,8 +10,10 @@ from repro_lambda.manifest import LambdaSpec, Source
 # The builder's contribution to every artifact key. NOT the package version: a
 # release that leaves the packaged bytes alone must keep every key, or promote-by-key
 # sees two keys for one zip. Bump it only when the same inputs would produce different
-# zip bytes (packaging, normalisation, install flags, base-image handling). The value
-# is frozen at the last version that was folded here, so existing keys stay valid.
+# zip bytes (packaging, normalisation, install flags, base-image handling), and update
+# the fingerprints in tests/test_hash_contract.py with it. Frozen at "0.8.0", the last
+# package version folded here, so keys minted by 0.8.0 stay valid; the packaging
+# modules did not change between 0.7.2 and 0.8.1.
 HASH_CONTRACT = "0.8.0"
 
 

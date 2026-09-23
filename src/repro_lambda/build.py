@@ -144,7 +144,7 @@ def build_one(
 
         uploader = S3Uploader(region=spec.region)
         if uploader.exists(bucket=target_bucket, key=bucket_key):
-            _record(catalog, spec, sha, source_commit, builder)
+            _record(catalog, spec, sha, source_commit, builder, built=False)
             return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
 
         # Cache miss only: fetch + verify + extract declarative sources into the staged
@@ -182,7 +182,7 @@ def build_one(
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}
-        _record(catalog, spec, sha, source_commit, builder)
+        _record(catalog, spec, sha, source_commit, builder, built=True)
         return BuildOutcome(BuildResult.BUILT_AND_UPLOADED, sha, bucket_key)
 
 
@@ -192,6 +192,8 @@ def _record(
     sha: str,
     source_commit: str,
     builder: BuilderConfig,
+    *,
+    built: bool,
 ) -> None:
     if spec.package_manager == "npm":
         primary_image = builder.base_image_nodejs
@@ -205,7 +207,9 @@ def _record(
             runtime=spec.runtime,
             arch=spec.arch,
             region=spec.region,
-            builder_version=__version__,
+            # A cache hit did not build the object, and the key no longer carries the
+            # package version, so only the hash contract is known to match it.
+            builder_version=__version__ if built else f"hash-contract:{HASH_CONTRACT}",
             base_image_digest=primary_image.split("@", 1)[-1],
             built_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         ),
