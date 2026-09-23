@@ -54,3 +54,25 @@ def test_content_hash_golden_key(tmp_path: Path):
     )
     got = compute_content_hash(src, lock, spec, "img@sha256:0", HASH_CONTRACT)
     assert got == "de8da0c8801288758e8dc86edc15b085ffadc6eb915dcc45d875bfb235854dea"
+
+
+# The zip command's exclusion list lives in cli.py; changing it changes the zip bytes.
+ZIP_EXCLUDES = {
+    "0.8.0": [
+        "*__pycache__*",
+        "*.pyc",
+        "*.dist-info/RECORD",
+        "*.dist-info/INSTALLER",
+        "*.dist-info/direct_url.json",
+        "*.dist-info/REQUESTED",
+    ],
+}
+
+
+def test_zip_excludes_match_the_hash_contract():
+    from repro_lambda.cli import _LAMBDA_ZIP_EXCLUDES
+
+    assert _LAMBDA_ZIP_EXCLUDES == ZIP_EXCLUDES.get(HASH_CONTRACT), (
+        "the lambda zip exclusion list changed: bump HASH_CONTRACT in hasher.py "
+        "and record the new list under the contract"
+    )
