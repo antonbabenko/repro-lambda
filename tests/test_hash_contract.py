@@ -11,11 +11,15 @@ from repro_lambda.manifest import LambdaSpec
 
 _PKG = Path(repro_lambda.__file__).parent
 
-# Modules that shape the zip bytes beyond the hashed inputs. Editing one means deciding
-# whether the same inputs can now produce different bytes: if yes, bump HASH_CONTRACT;
-# either way, record the new fingerprints here under the (possibly new) contract.
+# Modules that shape the zip bytes or the key beyond the hashed inputs. Editing one
+# means deciding whether the same inputs can now produce different bytes: if yes, bump
+# HASH_CONTRACT; either way, record the new fingerprints here under the (possibly new)
+# contract. A fingerprint update is cheap; a key change re-keys every artifact.
+# Known gap: npm packaging uses base_image_python, which is not in the key (issue #20).
 PACKAGING_FINGERPRINTS = {
     "0.8.0": {
+        "build.py": "2dc3140e8af9e7e68d70199f85f261db04eef3e847d60ac21c9276133e9ec041",
+        "hasher.py": "c5eb56e00737efdca6c4bb47b694390b3dbd8941569f6c5cb299ba4cd5b18704",
         "zip_packager.py": "56810a5e337a2fd5f72c269ba81bab06ca2f019e14e0edb728d6c37881d7cf0a",
         "docker_runner.py": "0092a103b8dd11e6c0a00979e4c38272ccc6d707f2ee74035d8d84e61fed4988",
         "source_stager.py": "38186277fb94ab6feac8a07cad2ae35f5adfaa52bde3d51ac71daccb003d3c68",
