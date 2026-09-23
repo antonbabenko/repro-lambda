@@ -32,6 +32,12 @@ Once an artifact with a content-hash key (`lambdas/<name>/<sha256>.zip`) is
 uploaded, the key is permanently bound to those bytes. `repro-lambda` treats
 HTTP 412 PreconditionFailed on a duplicate upload as success.
 
+The key hashes the build inputs (staged source, requirements lock, spec, base
+image, filters, sources) plus a builder hash contract. It does not hash the
+repro-lambda package version, so upgrading repro-lambda keeps every existing key
+unless the release changes the packaged bytes, in which case it bumps
+`HASH_CONTRACT` in `hasher.py` and says so in its changelog entry.
+
 ## Terraform - per-account bootstrap
 
 The Terraform below assumes you already have a configured AWS provider in the

@@ -7,6 +7,13 @@ from pathlib import Path
 
 from repro_lambda.manifest import LambdaSpec, Source
 
+# The builder's contribution to every artifact key. NOT the package version: a
+# release that leaves the packaged bytes alone must keep every key, or promote-by-key
+# sees two keys for one zip. Bump it only when the same inputs would produce different
+# zip bytes (packaging, normalisation, install flags, base-image handling). The value
+# is frozen at the last version that was folded here, so existing keys stay valid.
+HASH_CONTRACT = "0.8.0"
+
 
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -32,6 +39,7 @@ def compute_content_hash(
     """
     sha256 over: sorted (relative-path, sha256(content)) tuples for the staged tree
     + sha256(requirements_lock) + spec scalars + base_image + builder_version
+    (the HASH_CONTRACT, not the package version)
     + optional resolved include/exclude filter lists + optional extra_files keyed by
     destination relname (e.g. "package.json").
 

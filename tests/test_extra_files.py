@@ -220,3 +220,31 @@ def test_compute_sha_for_reflects_payload_binary(tmp_path: Path):
     sha_b = compute_sha_for(repo_root=repo, spec=spec, builder=builder)
 
     assert sha_a != sha_b, "content hash must track the bundled binary's bytes"
+
+
+def test_compute_sha_for_ignores_the_package_version(tmp_path: Path, monkeypatch):
+    # A release that does not change the packaged bytes must not re-key artifacts:
+    # identical zips under two keys break promote-by-key between accounts.
+    repo = _git_repo_with_source(tmp_path)
+    (repo / "handler" / "requirements.arm64.lock").write_text("")
+    builder = BuilderConfig(base_image_python=PINNED_IMAGE)
+    spec = _spec()
+
+    sha_a = compute_sha_for(repo_root=repo, spec=spec, builder=builder)
+    monkeypatch.setattr("repro_lambda.build.__version__", "99.0.0")
+    sha_b = compute_sha_for(repo_root=repo, spec=spec, builder=builder)
+
+    assert sha_a == sha_b
+
+
+def test_compute_sha_for_rekeys_on_hash_contract_bump(tmp_path: Path, monkeypatch):
+    repo = _git_repo_with_source(tmp_path)
+    (repo / "handler" / "requirements.arm64.lock").write_text("")
+    builder = BuilderConfig(base_image_python=PINNED_IMAGE)
+    spec = _spec()
+
+    sha_a = compute_sha_for(repo_root=repo, spec=spec, builder=builder)
+    monkeypatch.setattr("repro_lambda.build.HASH_CONTRACT", "bumped", raising=False)
+    sha_b = compute_sha_for(repo_root=repo, spec=spec, builder=builder)
+
+    assert sha_a != sha_b

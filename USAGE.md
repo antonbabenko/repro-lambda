@@ -86,9 +86,9 @@ include_patterns  = ["worker/**/*.py", "worker/**/*.json"]
 exclude_patterns  = ["**/tests/**"]
 ```
 
-The resolved per-lambda builder (base-image digest + include/exclude lists +
-builder version) folds into the content hash, so changing an override re-keys
-that lambda's artifact while leaving the others untouched.
+The resolved per-lambda builder (base-image digest + include/exclude lists)
+folds into the content hash, so changing an override re-keys that lambda's
+artifact while leaving the others untouched.
 
 ## Declarative sources - `[[lambda.source]]`
 

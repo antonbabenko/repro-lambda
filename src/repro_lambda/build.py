@@ -11,7 +11,7 @@ from pathlib import Path
 from repro_lambda import __version__
 from repro_lambda.catalog import Catalog, CatalogEntry
 from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
-from repro_lambda.hasher import compute_content_hash
+from repro_lambda.hasher import HASH_CONTRACT, compute_content_hash
 from repro_lambda.manifest import BuilderConfig, LambdaSpec, resolve_builder
 from repro_lambda.s3_uploader import S3Uploader, UploadResult
 from repro_lambda.source_stager import stage_source
@@ -83,7 +83,7 @@ def compute_sha_for(
             requirements_lock=lock_path,
             spec=spec,
             base_image=primary_base_image,
-            builder_version=__version__,
+            builder_version=HASH_CONTRACT,
             extra_files=extras,
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
             include_patterns=builder.include_patterns,
@@ -130,7 +130,7 @@ def build_one(
             requirements_lock=lock_path,
             spec=spec,
             base_image=primary_base_image,
-            builder_version=__version__,
+            builder_version=HASH_CONTRACT,
             extra_files=extras,
             payload_exec=[(ef.dest, ef.executable) for ef in spec.extra_files],
             include_patterns=builder.include_patterns,
