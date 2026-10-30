@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/antonbabenko/repro-lambda/compare/v0.8.2...v0.9.0) (2026-10-30)
+
+
+### Features
+
+* compile_bytecode ships checked-hash bytecode in python lambdas ([#22](https://github.com/antonbabenko/repro-lambda/issues/22)) ([47677cf](https://github.com/antonbabenko/repro-lambda/commit/47677cfdafe3832e5d0a570c5ce1fa7b509864c1))
+
 ## [0.8.2](https://github.com/antonbabenko/repro-lambda/compare/v0.8.1...v0.8.2) (2026-09-23)
 
 
