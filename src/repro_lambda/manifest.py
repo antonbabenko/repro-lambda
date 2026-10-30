@@ -131,6 +131,9 @@ class LambdaSpec:
     include_patterns: list[str] | None = None
     exclude_patterns: list[str] | None = None
     sources: tuple[Source, ...] = ()
+    # pip only: ship checked-hash bytecode compiled in the builder image, so a read-only
+    # /var/task does not recompile every imported module in every new process.
+    compile_bytecode: bool = False
 
     @property
     def resolved_requirements_lock(self) -> str:
@@ -450,6 +453,16 @@ def load_manifest(path: Path) -> Manifest:
 
         extra_files = _parse_extra_files(path, entry)
         sources = _parse_sources(path, entry)
+        compile_bytecode = entry.get("compile_bytecode", False)
+        if not isinstance(compile_bytecode, bool):
+            raise ValueError(
+                f"{path}: lambda {entry.get('logical_name')!r} compile_bytecode must be a boolean "
+                f"(got {compile_bytecode!r})"
+            )
+        if compile_bytecode and pkg != "pip":
+            raise ValueError(
+                f"{path}: lambda {entry.get('logical_name')!r} compile_bytecode is for pip lambdas"
+            )
 
         override_base_image = entry.get("base_image_python")
         if override_base_image is not None and "@sha256:" not in override_base_image:
@@ -489,6 +502,7 @@ def load_manifest(path: Path) -> Manifest:
                 include_patterns=list(override_include) if override_include is not None else None,
                 exclude_patterns=list(override_exclude) if override_exclude is not None else None,
                 sources=sources,
+                compile_bytecode=compile_bytecode,
             )
         )
 

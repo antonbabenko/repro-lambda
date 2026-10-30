@@ -68,6 +68,7 @@ def verify_reproducible(
                     base_image=builder.base_image_python,
                     arch=spec.arch,
                     python_version=spec.runtime.removeprefix("python"),
+                    compile_bytecode=spec.compile_bytecode,
                 )
             else:  # npm
                 node_ver = spec.runtime.removeprefix("nodejs").removesuffix(".x")

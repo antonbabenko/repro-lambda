@@ -381,18 +381,33 @@ _LAMBDA_ZIP_EXCLUDES = [
 ]
 
 
-def _zip_impl(src: Path, out: Path) -> None:
+_BYTECODE_PATTERNS = ("*__pycache__*", "*.pyc")
+
+
+def _zip_impl(src: Path, out: Path, compile_bytecode: bool = False) -> None:
     """Pack a directory into a deterministic zip (used inside container)."""
+    from repro_lambda.zip_packager import compile_bytecode as compile_tree
     from repro_lambda.zip_packager import pack_directory
 
-    pack_directory(src, out, exclude_glob=_LAMBDA_ZIP_EXCLUDES)
+    excludes = _LAMBDA_ZIP_EXCLUDES
+    if compile_bytecode:
+        compile_tree(src)
+        excludes = [p for p in excludes if p not in _BYTECODE_PATTERNS]
+    pack_directory(src, out, exclude_glob=excludes)
 
 
 @app.command(name="zip")
 def zip_(
     src: Annotated[Path, typer.Option("--src", help="Staged package directory.")],
     out: Annotated[Path, typer.Option("--out", help="Output zip path.")],
+    compile_bytecode: Annotated[
+        bool,
+        typer.Option(
+            "--compile-bytecode",
+            help="Compile checked-hash bytecode with this interpreter and keep it in the zip.",
+        ),
+    ] = False,
 ) -> None:
     """Pack a directory into a deterministic zip (used inside container)."""
-    _zip_impl(src, out)
+    _zip_impl(src, out, compile_bytecode)
     raise typer.Exit(0)

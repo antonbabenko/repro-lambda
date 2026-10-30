@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 import sys
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -76,3 +77,46 @@ def pack_directory(
             else:
                 data = p.read_bytes()
             zf.writestr(zinfo, data)
+
+
+def compile_bytecode(src: Path, deploy_root: str = "/var/task") -> None:
+    """Replace any bytecode under `src` with checked-hash .pyc built by this interpreter.
+
+    checked-hash bytecode carries no source mtime (the zip resets every mtime) and the
+    interpreter checks it against the source hash on import, so it stays valid in a
+    read-only deploy dir. Recorded file paths are rewritten from `src` to `deploy_root`
+    (tracebacks show the deployed paths, and the bytes do not depend on the staging dir);
+    PYTHONHASHSEED=0 keeps the marshalled output stable. A file that does not compile gets
+    no bytecode and is compiled at import as before; compileall's report is printed.
+    """
+    import shutil
+    import subprocess
+
+    root = src.resolve()
+    for cache in sorted(root.rglob("__pycache__"), reverse=True):
+        if cache.is_dir() and not cache.is_symlink():
+            shutil.rmtree(cache)
+    for stale in root.rglob("*.pyc"):
+        stale.unlink()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "compileall",
+            "-q",
+            "--invalidation-mode",
+            "checked-hash",
+            "-s",
+            str(root),
+            "-p",
+            deploy_root,
+            str(root),
+        ],
+        env={**os.environ, "PYTHONHASHSEED": "0"},
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(
+            f"warning: some files did not compile:\n{result.stdout}{result.stderr}", file=sys.stderr
+        )
