@@ -91,8 +91,11 @@ pip install \
 
 # Byte-output cleanup (caches + non-deterministic dist-info metadata) happens in the
 # Python zip step below, so this script needs no findutils/xargs (both absent from the
-# minimal AWS Lambda base images).
-python3 -m repro_lambda zip --src "$PKG" --out /out/lambda.zip
+# minimal AWS Lambda base images). With COMPILE_BYTECODE=1 the zip step first compiles
+# the tree with this image's interpreter (the Lambda runtime) and keeps the bytecode.
+ZIP_ARGS=""
+if [ "$COMPILE_BYTECODE" = "1" ]; then ZIP_ARGS="--compile-bytecode"; fi
+python3 -m repro_lambda zip --src "$PKG" --out /out/lambda.zip $ZIP_ARGS
 """
 
 _NODEJS_INSTALL_SCRIPT = r"""
@@ -161,6 +164,7 @@ def build_python_lambda(
     base_image: str,
     arch: str,
     python_version: str,
+    compile_bytecode: bool = False,
 ) -> None:
     """v0.1-compatible: install + pack inside the Python container."""
     if arch not in ARCH_TO_PIP_PLATFORMS:
@@ -196,6 +200,8 @@ def build_python_lambda(
         f"PIP_ABI=cp{pyver_compact}",
         "-e",
         f"PIP_PYVER={pyver}",
+        "-e",
+        f"COMPILE_BYTECODE={int(compile_bytecode)}",
         "--entrypoint",
         "bash",
         base_image,

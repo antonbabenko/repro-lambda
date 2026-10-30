@@ -18,10 +18,11 @@ _PKG = Path(repro_lambda.__file__).parent
 # Known gap: npm packaging uses base_image_python, which is not in the key (issue #20).
 PACKAGING_FINGERPRINTS = {
     "0.8.0": {
-        "build.py": "2dc3140e8af9e7e68d70199f85f261db04eef3e847d60ac21c9276133e9ec041",
-        "hasher.py": "c5eb56e00737efdca6c4bb47b694390b3dbd8941569f6c5cb299ba4cd5b18704",
-        "zip_packager.py": "56810a5e337a2fd5f72c269ba81bab06ca2f019e14e0edb728d6c37881d7cf0a",
-        "docker_runner.py": "0092a103b8dd11e6c0a00979e4c38272ccc6d707f2ee74035d8d84e61fed4988",
+        # compile_bytecode: off by default and hashed only when on, so no bump.
+        "build.py": "21b10b59acf04dae78431e1c50ebbb89d300dd5d32bbdd36e0ee9c2cb3673ea9",
+        "hasher.py": "1061efdcb802598001c9638e34222b25b083c6123ff9b59a18dff996a4e0a70f",
+        "zip_packager.py": "40d48633ece8d5d9ffffdb786d7479b8588ec7b1fae99a7db748e3963f9b333a",
+        "docker_runner.py": "e53208a62ee7ee40e33068b6c3ba936c5e7d75037b1502f1af8fed92391f8f52",
         "source_stager.py": "38186277fb94ab6feac8a07cad2ae35f5adfaa52bde3d51ac71daccb003d3c68",
         "sources.py": "10415ccc89b85f521fb64ef199f084f0bea1842032d414cb3d3537334f6caa0b",
     },

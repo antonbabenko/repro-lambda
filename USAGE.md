@@ -63,6 +63,29 @@ Pin the `base_image_python` to a specific digest with `docker pull <image> &&
 docker inspect --format='{{index .RepoDigests 0}}' <image>` - never use a
 floating tag in production.
 
+### Shipping bytecode (`compile_bytecode`)
+
+A Lambda's `/var/task` is read-only, so a package shipped without `.pyc` files is
+recompiled from source by every new Python process that imports it. For a large
+package (or a handler that starts Python subprocesses) that can cost seconds per
+invocation. Set `compile_bytecode = true` on a pip `[[lambda]]` to compile the whole
+package in the builder image (the runtime's own interpreter) and keep the bytecode
+in the zip:
+
+```toml
+[[lambda]]
+logical_name     = "app"
+# ...
+compile_bytecode = true
+```
+
+The zip step removes any bytecode already in the tree, then runs `compileall` with
+`--invalidation-mode checked-hash` (no source mtimes; the interpreter checks each
+`.pyc` against its source hash on import) and `PYTHONHASHSEED=0`, recording file paths
+as `/var/task/...` so the bytes do not depend on the staging directory. The zip stays
+byte-reproducible. The flag is part of the content key (only when set, so lambdas
+without it keep their keys). A file that does not compile ships as source only.
+
 ### Per-lambda builder overrides
 
 `[builder]` sets the defaults for every lambda. Any `[[lambda]]` may override

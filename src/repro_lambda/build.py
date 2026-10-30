@@ -167,6 +167,7 @@ def build_one(
                 base_image=builder.base_image_python,
                 arch=spec.arch,
                 python_version=spec.runtime.removeprefix("python"),
+                compile_bytecode=spec.compile_bytecode,
             )
         else:  # npm
             # nodejs22.x -> "22"; nodejs20.x -> "20"

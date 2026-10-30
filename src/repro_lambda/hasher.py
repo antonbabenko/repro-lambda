@@ -85,6 +85,8 @@ def compute_content_hash(
     h.update(f"package_manager={spec.package_manager}\n".encode())
     h.update(f"lambda_at_edge={int(spec.lambda_at_edge)}\n".encode())
     h.update(f"hash_extra={spec.hash_extra}\n".encode())
+    if spec.compile_bytecode:  # only when set, so specs without it keep their hashes
+        h.update(b"compile_bytecode=1\n")
     h.update(f"base_image={base_image}\n".encode())
     h.update(f"builder_version={builder_version}\n".encode())
 
