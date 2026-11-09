@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/antonbabenko/repro-lambda/compare/v0.9.0...v0.9.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **deps:** cap typer below 0.29 ([#24](https://github.com/antonbabenko/repro-lambda/issues/24)) ([2e535af](https://github.com/antonbabenko/repro-lambda/commit/2e535afb3bdb9e47c06f8ce32bd23185badcaa0f))
+
 ## [0.9.0](https://github.com/antonbabenko/repro-lambda/compare/v0.8.2...v0.9.0) (2026-10-30)
 
 
