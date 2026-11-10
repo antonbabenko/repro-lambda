@@ -5,7 +5,7 @@
 
 ### ⚠ BREAKING CHANGES
 
-* promote refuses a dev artifact with no recorded zip sha256 (uploaded by repro-lambda before this release) unless --allow-unrecorded is passed. Check such an artifact against a reproducible rebuild first.
+* HASH_CONTRACT is 0.10.0, so every artifact gets a new key on its next build. `promote` now requires a trusted expected sha256 (`--expected-sha256` or the committed catalog) and `--allow-unrecorded` is removed. Trusted builds pass `--reproduce-cache-hits` and a pin-grade row needs a matching S3 ChecksumSHA256.
 
 ### Features
 
