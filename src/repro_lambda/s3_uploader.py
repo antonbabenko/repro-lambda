@@ -53,6 +53,11 @@ class S3Uploader:
                 return False
             raise
 
+    def s3_checksum(self, *, bucket: str, key: str) -> str | None:
+        """The object's S3 ChecksumSHA256 (base64), computed by S3 from the body at write."""
+        head = self._client.head_object(Bucket=bucket, Key=key, ChecksumMode="ENABLED")
+        return head.get("ChecksumSHA256")
+
     def read(self, *, bucket: str, key: str) -> tuple[str, str | None]:
         """Download the object; return (sha256 of its body, recorded sha256 or None)."""
         obj = self._client.get_object(Bucket=bucket, Key=key)
@@ -143,6 +148,7 @@ class S3Uploader:
                 IfNoneMatch="*",
                 ServerSideEncryption="AES256",
                 Metadata={SHA256_METADATA_KEY: digest},
+                ChecksumAlgorithm="SHA256",
                 ChecksumSHA256=code_sha256(digest),
             )
             return UploadResult.UPLOADED

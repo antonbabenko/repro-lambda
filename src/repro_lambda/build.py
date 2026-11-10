@@ -13,7 +13,13 @@ from repro_lambda.catalog import Catalog, CatalogEntry
 from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
 from repro_lambda.hasher import HASH_CONTRACT, compute_content_hash
 from repro_lambda.manifest import BuilderConfig, LambdaSpec, resolve_builder
-from repro_lambda.s3_uploader import ArtifactIntegrityError, S3Uploader, UploadResult, sha256_hex
+from repro_lambda.s3_uploader import (
+    ArtifactIntegrityError,
+    S3Uploader,
+    UploadResult,
+    code_sha256,
+    sha256_hex,
+)
 from repro_lambda.source_stager import stage_source
 
 
@@ -214,13 +220,31 @@ def build_one(
                     f"{compare_sha} != rebuilt zip sha256 {built_sha}"
                 )
             # A missing record cannot be backfilled: the bucket denies any overwrite.
+            _require_s3_checksum(uploader, target_bucket, bucket_key, built_sha)
             _record(catalog, spec, sha, source_commit, builder, built=False, zip_sha256=built_sha)
             return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, built_sha, "reproduced")
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}
+        _require_s3_checksum(uploader, target_bucket, bucket_key, built_sha)
         _record(catalog, spec, sha, source_commit, builder, built=True, zip_sha256=built_sha)
         return BuildOutcome(BuildResult.BUILT_AND_UPLOADED, sha, bucket_key, built_sha, "built")
+
+
+def _require_s3_checksum(uploader: S3Uploader, bucket: str, key: str, zip_sha256: str) -> None:
+    """A pin-grade row must match the S3 ChecksumSHA256 the deploy-time checks read.
+
+    Promotion and the consumer's plan compare the pinned code_sha256 with the object's
+    S3 checksum, so an object without it (or with another) is refused here, at build
+    time, instead of failing a later plan.
+    """
+    got = uploader.s3_checksum(bucket=bucket, key=key)
+    want = code_sha256(zip_sha256)
+    if got != want:
+        raise ArtifactIntegrityError(
+            f"s3://{bucket}/{key}: S3 ChecksumSHA256 {got!r} != code_sha256 {want!r}; the "
+            f"object cannot be pinned (written without a checksum, or other bytes)"
+        )
 
 
 def _record(

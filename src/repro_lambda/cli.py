@@ -166,6 +166,8 @@ def build(
                 "outcome": outcome.outcome.value,
                 "sha256": outcome.sha256,
                 "bucket_key": outcome.bucket_key,
+                # Region of the artifact bucket (us-east-1 = the -us-east-1 variant).
+                "region": spec.region,
                 # Bytes behind the key (built, or verified on a cache hit). Pin these:
                 # zip_sha256 is hex, code_sha256 the same digest in base64 (S3
                 # ChecksumSHA256 / Lambda CodeSha256). Absent on a dry run.

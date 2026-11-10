@@ -22,6 +22,7 @@ from repro_lambda.s3_uploader import (
     ArtifactIntegrityError,
     S3Uploader,
     UploadResult,
+    code_sha256,
 )
 
 BUCKET = "dev-test-lambda-artifacts"
@@ -118,13 +119,38 @@ def test_preseeded_marker_with_wrong_recorded_sha_fails_the_build(repo, s3, dock
         _build(repo)
 
 
-def test_legacy_object_matching_a_rebuild_is_a_verified_cache_hit(repo, s3, docker):
+def test_object_matching_a_rebuild_without_s3_checksum_cannot_be_pinned(repo, s3, docker):
+    # Right bytes, but no S3 ChecksumSHA256 (written by another tool): the plan-time and
+    # promote checks read that checksum, so the build refuses to report it pin-grade.
     s3.put_object(Bucket=BUCKET, Key=_key(repo), Body=REAL_ZIP)
+
+    with pytest.raises(ArtifactIntegrityError, match="ChecksumSHA256"):
+        _build(repo)
+    docker.assert_called_once()
+
+
+def test_object_with_matching_bytes_and_s3_checksum_is_a_reproduced_cache_hit(repo, s3, docker):
+    s3.put_object(
+        Bucket=BUCKET,
+        Key=_key(repo),
+        Body=REAL_ZIP,
+        ChecksumAlgorithm="SHA256",
+        ChecksumSHA256=code_sha256(_sha(REAL_ZIP)),
+    )
 
     outcome = _build(repo)
 
-    assert outcome.outcome == BuildResult.CACHE_HIT
-    docker.assert_called_once()
+    assert (outcome.outcome, outcome.zip_source) == (BuildResult.CACHE_HIT, "reproduced")
+
+
+def test_upload_collision_with_same_bytes_but_no_s3_checksum_cannot_be_pinned(
+    repo, s3, docker, mocker
+):
+    mocker.patch.object(S3Uploader, "exists", return_value=False)
+    s3.put_object(Bucket=BUCKET, Key=_key(repo), Body=REAL_ZIP)
+
+    with pytest.raises(ArtifactIntegrityError, match="ChecksumSHA256"):
+        _build(repo)
 
 
 def test_upload_records_sha_and_next_cache_hit_skips_docker(repo, s3, docker):
