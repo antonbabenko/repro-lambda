@@ -103,13 +103,20 @@ jobs:
           restore-keys: |
             repro-sources-${{ matrix.arch }}-
 
+      # Pull requests never assume the dev role or write the artifact bucket: the key is
+      # an input hash a PR author can compute, and the bucket is first-write-wins, so a
+      # PR-run write could plant the bytes a later master build reuses. A PR only runs the
+      # local reproducibility check below. Callers should also scope the role's OIDC trust
+      # to their default branch.
       - name: Configure AWS credentials (dev)
+        if: github.event_name != 'pull_request'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ inputs.aws_dev_role_arn }}
           aws-region: eu-west-1
 
       - name: Build (dev bucket)
+        if: github.event_name != 'pull_request'
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.dev_bucket }}
           REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
@@ -120,7 +127,7 @@ jobs:
       # NB: the JSON lives in RUNNER_TEMP (outside the workspace), so hashFiles() can't guard
       # it - run on success() and skip inside the script if the file is somehow absent.
       - name: Build summary (content shas + promote commands)
-        if: success()
+        if: success() && github.event_name != 'pull_request'
         env:
           SUMMARY_JSON: ${{ runner.temp }}/build-summary.json
           PROMOTION_REPO: ${{ inputs.promotion_repo }}

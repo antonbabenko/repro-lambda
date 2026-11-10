@@ -65,11 +65,17 @@ def promote_one(
     prod_bucket: str,
     uploader: S3Uploader | None = None,
     dry_run: bool = False,
+    allow_unrecorded: bool = False,
 ) -> PromoteOutcome:
     """Copy one lambda's `<sha>.zip` from the dev bucket to the prod bucket.
 
     Lambda@Edge specs (region us-east-1) resolve to the `-us-east-1` bucket
     variant on both sides, matching the build-side key scheme exactly.
+
+    The copy is verified (S3Uploader.copy): the dev object's body must match the
+    sha256 recorded when it was built. ``allow_unrecorded`` accepts a dev object with
+    no recorded sha256 (built before recording existed); use it only after checking
+    that object against a reproducible rebuild.
     """
     src_bucket = _bucket_for(spec, dev_bucket)
     dst_bucket = _bucket_for(spec, prod_bucket)
@@ -84,7 +90,9 @@ def promote_one(
             f"{spec.logical_name}: source artifact missing at s3://{src_bucket}/{key}"
         )
 
-    result = up.copy(src_bucket=src_bucket, dst_bucket=dst_bucket, key=key)
+    result = up.copy(
+        src_bucket=src_bucket, dst_bucket=dst_bucket, key=key, allow_unrecorded=allow_unrecorded
+    )
     outcome = (
         PromoteResult.PROMOTED if result is UploadResult.UPLOADED else PromoteResult.ALREADY_PRESENT
     )

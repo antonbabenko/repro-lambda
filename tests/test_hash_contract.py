@@ -19,7 +19,8 @@ _PKG = Path(repro_lambda.__file__).parent
 PACKAGING_FINGERPRINTS = {
     "0.8.0": {
         # compile_bytecode: off by default and hashed only when on, so no bump.
-        "build.py": "21b10b59acf04dae78431e1c50ebbb89d300dd5d32bbdd36e0ee9c2cb3673ea9",
+        # Verified cache hits (recorded zip sha256): no change to built bytes, no bump.
+        "build.py": "415bf71e2e0ef1ddaf413993afe05b0c53122064b69068006b489da2a7d1269a",
         "hasher.py": "1061efdcb802598001c9638e34222b25b083c6123ff9b59a18dff996a4e0a70f",
         "zip_packager.py": "40d48633ece8d5d9ffffdb786d7479b8588ec7b1fae99a7db748e3963f9b333a",
         "docker_runner.py": "e53208a62ee7ee40e33068b6c3ba936c5e7d75037b1502f1af8fed92391f8f52",

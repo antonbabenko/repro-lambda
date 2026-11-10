@@ -252,8 +252,17 @@ attributes (`source_path`, `build_in_docker`, `trigger_on_package_timestamp`,
   the bucket. Check the inline policy resources include both the bucket ARN and
   `${bucket_arn}/*`.
 - **`PreconditionFailed` on every upload**: the artifact already exists with
-  that sha. This is the expected cache-hit behavior; `repro-lambda` treats it
-  as success.
+  that sha. `repro-lambda` then downloads the existing object and accepts it only
+  if its bytes hash to the zip it just built.
+- **`ArtifactIntegrityError`**: an object under the content key does not hold the
+  bytes this source builds. Every upload records the zip's sha256 as object
+  metadata (`x-amz-meta-zip-sha256`) and as the S3 `ChecksumSHA256` in the same
+  first write. A cache hit hashes the object against that record; an object with
+  no record (uploaded before 0.10) is rebuilt and compared byte for byte.
+  `promote` and copies check the source and the destination the same way, and
+  refuse a source with no record unless `--allow-unrecorded` is passed. The key
+  is an input hash anyone with the source can compute, so treat this error as a
+  possibly planted artifact: find who wrote the object before doing anything else.
 - **AWS CLI multipart upload fails with 403**: bucket policy denies multipart
   parts. Pin the multipart threshold above your Lambda size cap:
   `aws configure set s3.multipart_threshold 300MB`.

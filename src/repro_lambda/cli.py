@@ -215,6 +215,14 @@ def promote(
         ),
     ] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    allow_unrecorded: Annotated[
+        bool,
+        typer.Option(
+            "--allow-unrecorded",
+            help="Accept a dev artifact with no recorded zip sha256 (built before "
+            "recording existed). Check it against a reproducible rebuild first.",
+        ),
+    ] = False,
 ) -> None:
     """Copy built artifacts dev -> prod by content hash (no rebuild).
 
@@ -233,6 +241,7 @@ def promote(
         promote_one,
         sha_from_catalog,
     )
+    from repro_lambda.s3_uploader import ArtifactIntegrityError
 
     repo_root = manifest.parent.resolve()
     parsed = load_manifest(manifest)
@@ -273,8 +282,9 @@ def promote(
                 dev_bucket=dev_bucket,
                 prod_bucket=prod_bucket,
                 dry_run=dry_run,
+                allow_unrecorded=allow_unrecorded,
             )
-        except (MissingSourceArtifactError, UnknownShaError) as e:
+        except (MissingSourceArtifactError, UnknownShaError, ArtifactIntegrityError) as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1) from e
         summary.append(

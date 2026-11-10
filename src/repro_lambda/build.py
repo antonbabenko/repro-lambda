@@ -13,7 +13,7 @@ from repro_lambda.catalog import Catalog, CatalogEntry
 from repro_lambda.docker_runner import build_nodejs_lambda, build_python_lambda
 from repro_lambda.hasher import HASH_CONTRACT, compute_content_hash
 from repro_lambda.manifest import BuilderConfig, LambdaSpec, resolve_builder
-from repro_lambda.s3_uploader import S3Uploader, UploadResult
+from repro_lambda.s3_uploader import ArtifactIntegrityError, S3Uploader, UploadResult, sha256_hex
 from repro_lambda.source_stager import stage_source
 
 
@@ -143,12 +143,27 @@ def build_one(
             return BuildOutcome(BuildResult.DRY_RUN, sha, bucket_key)
 
         uploader = S3Uploader(region=spec.region)
+        # The key is an input hash anyone can compute and the bucket is first-write-wins,
+        # so an existing object is never trusted by its key: its body must match the
+        # sha256 recorded at first write. With no recorded sha256 (a legacy or foreign
+        # object), rebuild and compare the bytes below instead.
+        unrecorded_sha: str | None = None
         if uploader.exists(bucket=target_bucket, key=bucket_key):
-            _record(catalog, spec, sha, source_commit, builder, built=False)
-            return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
+            actual, recorded = uploader.read(bucket=target_bucket, key=bucket_key)
+            if recorded is None:
+                unrecorded_sha = actual
+            elif recorded == actual:
+                _record(catalog, spec, sha, source_commit, builder, built=False)
+                return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
+            else:
+                raise ArtifactIntegrityError(
+                    f"s3://{target_bucket}/{bucket_key}: body sha256 {actual} != "
+                    f"recorded sha256 {recorded}"
+                )
 
-        # Cache miss only: fetch + verify + extract declarative sources into the staged
-        # tree (post-filter; collides loudly with already-staged source/payload files).
+        # Cache miss (or an unrecorded object to compare): fetch + verify + extract
+        # declarative sources into the staged tree (post-filter; collides loudly with
+        # already-staged source/payload files).
         if spec.sources:
             from repro_lambda.sources import fetch_sources
 
@@ -180,6 +195,16 @@ def build_one(
                 arch=spec.arch,
                 node_version=node_ver,
             )
+
+        if unrecorded_sha is not None:
+            built_sha = sha256_hex(out_zip.read_bytes())
+            if built_sha != unrecorded_sha:
+                raise ArtifactIntegrityError(
+                    f"s3://{target_bucket}/{bucket_key}: existing body sha256 "
+                    f"{unrecorded_sha} != rebuilt zip sha256 {built_sha}"
+                )
+            _record(catalog, spec, sha, source_commit, builder, built=False)
+            return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}

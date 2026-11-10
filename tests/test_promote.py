@@ -1,5 +1,6 @@
 """Promote (dev -> prod copy by content hash) unit + CLI coverage."""
 
+import hashlib
 from pathlib import Path
 
 import boto3
@@ -16,12 +17,17 @@ from repro_lambda.promote import (
     promote_one,
     sha_from_catalog,
 )
-from repro_lambda.s3_uploader import S3Uploader, UploadResult
+from repro_lambda.s3_uploader import SHA256_METADATA_KEY, S3Uploader, UploadResult
 
 runner = CliRunner()
 
 DEV = "dev-test-lambda-artifacts"
 PROD = "prod-test-lambda-artifacts"
+
+
+def _recorded(body: bytes) -> dict[str, str]:
+    """Metadata a repro-lambda upload writes: the body's sha256."""
+    return {SHA256_METADATA_KEY: hashlib.sha256(body).hexdigest()}
 
 
 def _make_bucket(client, name: str, region: str) -> None:
@@ -52,7 +58,12 @@ def test_copy_uploads_then_reports_already_present():
         c = boto3.client("s3", region_name="eu-west-1")
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
-        c.put_object(Bucket=DEV, Key="lambdas/app/abc.zip", Body=b"PK\x05\x06" + b"\x00" * 18)
+        c.put_object(
+            Bucket=DEV,
+            Key="lambdas/app/abc.zip",
+            Body=b"PK\x05\x06" + b"\x00" * 18,
+            Metadata=_recorded(b"PK\x05\x06" + b"\x00" * 18),
+        )
 
         up = S3Uploader(region="eu-west-1")
         first = up.copy(src_bucket=DEV, dst_bucket=PROD, key="lambdas/app/abc.zip")
@@ -71,7 +82,7 @@ def test_promote_one_copies_regional_lambda():
         c = boto3.client("s3", region_name="eu-west-1")
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
-        c.put_object(Bucket=DEV, Key="lambdas/app/sha1.zip", Body=b"z")
+        c.put_object(Bucket=DEV, Key="lambdas/app/sha1.zip", Body=b"z", Metadata=_recorded(b"z"))
 
         out = promote_one(spec=_spec("app"), sha="sha1", dev_bucket=DEV, prod_bucket=PROD)
 
@@ -90,7 +101,12 @@ def test_promote_one_edge_lambda_uses_us_east_1_bucket_variant():
         _make_bucket(eu, PROD, "eu-west-1")
         _make_bucket(us, f"{DEV}-us-east-1", "us-east-1")
         _make_bucket(us, f"{PROD}-us-east-1", "us-east-1")
-        us.put_object(Bucket=f"{DEV}-us-east-1", Key="lambdas/edge/e1.zip", Body=b"z")
+        us.put_object(
+            Bucket=f"{DEV}-us-east-1",
+            Key="lambdas/edge/e1.zip",
+            Body=b"z",
+            Metadata=_recorded(b"z"),
+        )
 
         out = promote_one(
             spec=_spec("edge", region="us-east-1", at_edge=True),
@@ -170,7 +186,9 @@ def test_cli_promote_copies_from_catalog(tmp_path: Path):
         c = boto3.client("s3", region_name="eu-west-1")
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
-        c.put_object(Bucket=DEV, Key="lambdas/app/cafef00d.zip", Body=b"z")
+        c.put_object(
+            Bucket=DEV, Key="lambdas/app/cafef00d.zip", Body=b"z", Metadata=_recorded(b"z")
+        )
 
         result = runner.invoke(
             app,
@@ -238,7 +256,9 @@ def test_cli_promote_explicit_sha_bypasses_catalog(tmp_path: Path):
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
         # Only the explicit-sha object exists; the catalog's current sha does not.
-        c.put_object(Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z")
+        c.put_object(
+            Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z", Metadata=_recorded(b"z")
+        )
 
         result = runner.invoke(
             app,
@@ -297,3 +317,33 @@ def test_cli_promote_sha_invalid_hex_exits_2(tmp_path: Path):
         ],
     )
     assert result.exit_code == 2  # not 64-hex
+
+
+def test_cli_promote_unrecorded_artifact_needs_allow_unrecorded(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    with mock_aws():
+        c = boto3.client("s3", region_name="eu-west-1")
+        _make_bucket(c, DEV, "eu-west-1")
+        _make_bucket(c, PROD, "eu-west-1")
+        c.put_object(Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z")
+        args = [
+            "promote",
+            "app",
+            "--manifest",
+            str(repo / "lambdas.toml"),
+            "--dev-bucket",
+            DEV,
+            "--prod-bucket",
+            PROD,
+            "--sha",
+            _EXPLICIT_SHA,
+        ]
+
+        refused = runner.invoke(app, args)
+        assert refused.exit_code == 1
+        assert not S3Uploader(region="eu-west-1").exists(
+            bucket=PROD, key=f"lambdas/app/{_EXPLICIT_SHA}.zip"
+        )
+
+        allowed = runner.invoke(app, [*args, "--allow-unrecorded"])
+        assert allowed.exit_code == 0, allowed.stdout
