@@ -14,7 +14,11 @@ from repro_lambda.manifest import LambdaSpec, Source
 # the fingerprints in tests/test_hash_contract.py with it. Frozen at "0.8.0", the last
 # package version folded here, so keys minted by 0.8.0 stay valid; the packaging
 # modules did not change between 0.7.2 and 0.8.1.
-HASH_CONTRACT = "0.8.0"
+# "0.10.0": a deliberate re-key with unchanged bytes. Keys minted before 0.10 were
+# writable by any run the builder role trusted and carry no recorded zip sha256, so
+# every artifact is rebuilt under a fresh key, written once with its sha256 recorded,
+# and pinned with that sha256. Old keys are never reused.
+HASH_CONTRACT = "0.10.0"
 
 
 def _sha256_file(path: Path) -> str:

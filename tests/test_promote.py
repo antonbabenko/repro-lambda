@@ -1,5 +1,7 @@
 """Promote (dev -> prod copy by content hash) unit + CLI coverage."""
 
+import hashlib
+import json
 from pathlib import Path
 
 import boto3
@@ -10,18 +12,27 @@ from typer.testing import CliRunner
 from repro_lambda.cli import app
 from repro_lambda.manifest import LambdaSpec
 from repro_lambda.promote import (
+    MissingExpectedShaError,
     MissingSourceArtifactError,
     PromoteResult,
     UnknownShaError,
     promote_one,
     sha_from_catalog,
 )
-from repro_lambda.s3_uploader import S3Uploader, UploadResult
+from repro_lambda.s3_uploader import SHA256_METADATA_KEY, S3Uploader, UploadResult
 
 runner = CliRunner()
 
 DEV = "dev-test-lambda-artifacts"
 PROD = "prod-test-lambda-artifacts"
+
+
+_Z = hashlib.sha256(b"z").hexdigest()
+
+
+def _recorded(body: bytes) -> dict[str, str]:
+    """Metadata a repro-lambda upload writes: the body's sha256."""
+    return {SHA256_METADATA_KEY: hashlib.sha256(body).hexdigest()}
 
 
 def _make_bucket(client, name: str, region: str) -> None:
@@ -52,7 +63,12 @@ def test_copy_uploads_then_reports_already_present():
         c = boto3.client("s3", region_name="eu-west-1")
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
-        c.put_object(Bucket=DEV, Key="lambdas/app/abc.zip", Body=b"PK\x05\x06" + b"\x00" * 18)
+        c.put_object(
+            Bucket=DEV,
+            Key="lambdas/app/abc.zip",
+            Body=b"PK\x05\x06" + b"\x00" * 18,
+            Metadata=_recorded(b"PK\x05\x06" + b"\x00" * 18),
+        )
 
         up = S3Uploader(region="eu-west-1")
         first = up.copy(src_bucket=DEV, dst_bucket=PROD, key="lambdas/app/abc.zip")
@@ -71,9 +87,11 @@ def test_promote_one_copies_regional_lambda():
         c = boto3.client("s3", region_name="eu-west-1")
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
-        c.put_object(Bucket=DEV, Key="lambdas/app/sha1.zip", Body=b"z")
+        c.put_object(Bucket=DEV, Key="lambdas/app/sha1.zip", Body=b"z", Metadata=_recorded(b"z"))
 
-        out = promote_one(spec=_spec("app"), sha="sha1", dev_bucket=DEV, prod_bucket=PROD)
+        out = promote_one(
+            spec=_spec("app"), sha="sha1", dev_bucket=DEV, prod_bucket=PROD, expected_sha256=_Z
+        )
 
         assert out.outcome == PromoteResult.PROMOTED
         assert out.src_bucket == DEV
@@ -90,13 +108,19 @@ def test_promote_one_edge_lambda_uses_us_east_1_bucket_variant():
         _make_bucket(eu, PROD, "eu-west-1")
         _make_bucket(us, f"{DEV}-us-east-1", "us-east-1")
         _make_bucket(us, f"{PROD}-us-east-1", "us-east-1")
-        us.put_object(Bucket=f"{DEV}-us-east-1", Key="lambdas/edge/e1.zip", Body=b"z")
+        us.put_object(
+            Bucket=f"{DEV}-us-east-1",
+            Key="lambdas/edge/e1.zip",
+            Body=b"z",
+            Metadata=_recorded(b"z"),
+        )
 
         out = promote_one(
             spec=_spec("edge", region="us-east-1", at_edge=True),
             sha="e1",
             dev_bucket=DEV,
             prod_bucket=PROD,
+            expected_sha256=_Z,
         )
 
         assert out.src_bucket == f"{DEV}-us-east-1"
@@ -111,7 +135,26 @@ def test_promote_one_missing_source_raises():
         _make_bucket(c, PROD, "eu-west-1")
 
         with pytest.raises(MissingSourceArtifactError):
-            promote_one(spec=_spec("app"), sha="missing", dev_bucket=DEV, prod_bucket=PROD)
+            promote_one(
+                spec=_spec("app"),
+                sha="missing",
+                dev_bucket=DEV,
+                prod_bucket=PROD,
+                expected_sha256=_Z,
+            )
+
+
+def test_promote_one_refuses_without_a_trusted_expected_sha():
+    # The object's own record is writer-set: never enough to authorize a prod copy.
+    with mock_aws():
+        c = boto3.client("s3", region_name="eu-west-1")
+        _make_bucket(c, DEV, "eu-west-1")
+        _make_bucket(c, PROD, "eu-west-1")
+        c.put_object(Bucket=DEV, Key="lambdas/app/sha1.zip", Body=b"z", Metadata=_recorded(b"z"))
+
+        with pytest.raises(MissingExpectedShaError):
+            promote_one(spec=_spec("app"), sha="sha1", dev_bucket=DEV, prod_bucket=PROD)
+        assert not S3Uploader(region="eu-west-1").exists(bucket=PROD, key="lambdas/app/sha1.zip")
 
 
 def test_promote_one_dry_run_touches_no_s3():
@@ -159,7 +202,30 @@ def _consumer(tmp_path: Path) -> Path:
     )
     (repo / "builds").mkdir()
     (repo / "builds" / "catalog.json").write_text(
-        '{"schema_version": 1, "lambdas": {"app": {"current": "cafef00d", "history": []}}}\n'
+        json.dumps(
+            {
+                "schema_version": 1,
+                "lambdas": {
+                    "app": {
+                        "current": "cafef00d",
+                        "history": [
+                            {
+                                "sha256": "cafef00d",
+                                "source_commit": "deadbeef",
+                                "runtime": "python3.13",
+                                "arch": "arm64",
+                                "region": "eu-west-1",
+                                "builder_version": "0.10.0",
+                                "base_image_digest": "sha256:0",
+                                "built_at": "2026-11-10T00:00:00Z",
+                                "zip_sha256": _Z,
+                            }
+                        ],
+                    }
+                },
+            }
+        )
+        + "\n"
     )
     return repo
 
@@ -170,7 +236,9 @@ def test_cli_promote_copies_from_catalog(tmp_path: Path):
         c = boto3.client("s3", region_name="eu-west-1")
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
-        c.put_object(Bucket=DEV, Key="lambdas/app/cafef00d.zip", Body=b"z")
+        c.put_object(
+            Bucket=DEV, Key="lambdas/app/cafef00d.zip", Body=b"z", Metadata=_recorded(b"z")
+        )
 
         result = runner.invoke(
             app,
@@ -238,7 +306,9 @@ def test_cli_promote_explicit_sha_bypasses_catalog(tmp_path: Path):
         _make_bucket(c, DEV, "eu-west-1")
         _make_bucket(c, PROD, "eu-west-1")
         # Only the explicit-sha object exists; the catalog's current sha does not.
-        c.put_object(Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z")
+        c.put_object(
+            Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z", Metadata=_recorded(b"z")
+        )
 
         result = runner.invoke(
             app,
@@ -253,6 +323,8 @@ def test_cli_promote_explicit_sha_bypasses_catalog(tmp_path: Path):
                 PROD,
                 "--sha",
                 _EXPLICIT_SHA,
+                "--expected-sha256",
+                _Z,
             ],
         )
         assert result.exit_code == 0, result.stdout
@@ -297,3 +369,62 @@ def test_cli_promote_sha_invalid_hex_exits_2(tmp_path: Path):
         ],
     )
     assert result.exit_code == 2  # not 64-hex
+
+
+def test_cli_promote_unrecorded_artifact_needs_matching_expected_sha256(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    with mock_aws():
+        c = boto3.client("s3", region_name="eu-west-1")
+        _make_bucket(c, DEV, "eu-west-1")
+        _make_bucket(c, PROD, "eu-west-1")
+        c.put_object(Bucket=DEV, Key=f"lambdas/app/{_EXPLICIT_SHA}.zip", Body=b"z")
+        args = [
+            "promote",
+            "app",
+            "--manifest",
+            str(repo / "lambdas.toml"),
+            "--dev-bucket",
+            DEV,
+            "--prod-bucket",
+            PROD,
+            "--sha",
+            _EXPLICIT_SHA,
+        ]
+        dst = f"lambdas/app/{_EXPLICIT_SHA}.zip"
+
+        assert runner.invoke(app, args).exit_code == 1
+        wrong = runner.invoke(app, [*args, "--expected-sha256", "b" * 64])
+        assert wrong.exit_code == 1
+        assert not S3Uploader(region="eu-west-1").exists(bucket=PROD, key=dst)
+
+        ok = runner.invoke(app, [*args, "--expected-sha256", hashlib.sha256(b"z").hexdigest()])
+        assert ok.exit_code == 0, ok.stdout
+        assert S3Uploader(region="eu-west-1").exists(bucket=PROD, key=dst)
+
+
+def test_cli_promote_expected_sha256_shape_and_target(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    base = ["promote", "--manifest", str(repo / "lambdas.toml"), "--dry-run"]
+    assert runner.invoke(app, [*base, "app", "--expected-sha256", "XYZ"]).exit_code == 2
+    assert runner.invoke(app, [*base, "all", "--expected-sha256", "a" * 64]).exit_code == 2
+
+
+def test_cli_promote_from_catalog_rejects_bytes_other_than_the_recorded_zip(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    with mock_aws():
+        c = boto3.client("s3", region_name="eu-west-1")
+        _make_bucket(c, DEV, "eu-west-1")
+        _make_bucket(c, PROD, "eu-west-1")
+        # Foreign bytes with a self-consistent record: the catalog's zip_sha256 catches it.
+        c.put_object(
+            Bucket=DEV,
+            Key="lambdas/app/cafef00d.zip",
+            Body=b"foreign",
+            Metadata=_recorded(b"foreign"),
+        )
+        args = ["promote", "app", "--manifest", str(repo / "lambdas.toml")]
+        result = runner.invoke(app, [*args, "--dev-bucket", DEV, "--prod-bucket", PROD])
+        assert result.exit_code == 1
+        assert not S3Uploader(region="eu-west-1").exists(
+            bucket=PROD, key="lambdas/app/cafef00d.zip"
+        )

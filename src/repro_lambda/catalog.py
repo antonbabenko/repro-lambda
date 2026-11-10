@@ -20,6 +20,9 @@ class CatalogEntry:
     builder_version: str
     base_image_digest: str
     built_at: str  # ISO-8601 UTC, e.g. "2026-05-27T09:30:00Z"
+    # sha256 of the zip bytes, set only when this run built or reproduced them (never
+    # from an object's writer-set record). promote checks the artifact against it.
+    zip_sha256: str | None = None
 
 
 @dataclass
@@ -38,6 +41,9 @@ class Catalog:
             self.lambdas[logical_name] = LambdaCatalog(current=entry.sha256, history=[entry])
             return
         if lc.current == entry.sha256:
+            # Same artifact: keep its first entry, but learn the reproduced zip sha256.
+            if entry.zip_sha256 and lc.history and not lc.history[0].zip_sha256:
+                lc.history[0].zip_sha256 = entry.zip_sha256
             return
         lc.history.insert(0, entry)
         lc.current = entry.sha256
@@ -56,6 +62,15 @@ class Catalog:
             },
         }
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def zip_sha256_for(catalog: Catalog, logical_name: str, sha: str) -> str | None:
+    """The zip sha256 a build of this repo recorded for one artifact key, if any."""
+    lc = catalog.lambdas.get(logical_name)
+    for e in lc.history if lc else []:
+        if e.sha256 == sha and e.zip_sha256:
+            return e.zip_sha256
+    return None
 
 
 def load_catalog(path: Path) -> Catalog:

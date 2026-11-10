@@ -20,8 +20,14 @@ on:
 
 jobs:
   build:
-    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0
+    # The job that receives id-token: write gets a reusable workflow you cannot move
+    # under it: pin the commit of a release tag, and the matching tool version.
+    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@<release commit sha> # v0.x.y
+    permissions:
+      contents: write
+      id-token: write
     with:
+      repro_lambda_version: 0.x.y
       manifest_path: lambdas.toml
       aws_dev_role_arn: arn:aws:iam::<dev-account-id>:role/gha-lambda-builder-dev
       dev_bucket: <dev-env>-my-lambda-artifacts
@@ -30,9 +36,13 @@ jobs:
       # prod_bucket: <prod-env>-my-lambda-artifacts
 ```
 
-Pin the reusable workflow with the sliding major tag `@v0` - it auto-moves to the
-latest backward-compatible 0.x release on every tag (switch to `@v1` once repro-lambda
-ships 1.0). The role ARNs are not secrets: the boundary is the OIDC trust policy plus
+Pin the reusable workflow to the commit of a release tag, not the sliding `@v0`:
+the job holds `id-token: write`, so whoever can move the tag chooses the code that
+assumes your role. The workflow skips AWS for every event except a push or manual
+dispatch on your default branch, and still scope the role's OIDC trust to
+`repo:<owner>/<repo>:ref:refs/heads/<default branch>`. It uploads the build JSON
+(`repro-lambda-build-summary-<arch>`), whose `zip_sha256` / `code_sha256` are what a
+pin job should record next to each key. The role ARNs are not secrets: the boundary is the OIDC trust policy plus
 the key-level bucket immutability, so they are plain inputs (only the account IDs,
 which are public), not stored secrets.
 
@@ -185,8 +195,14 @@ In CI, pass the token to the reusable `build.yml` as the `sources_token` secret:
 ```yaml
 jobs:
   build:
-    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@v0
+    # The job that receives id-token: write gets a reusable workflow you cannot move
+    # under it: pin the commit of a release tag, and the matching tool version.
+    uses: antonbabenko/repro-lambda/.github/workflows/build.yml@<release commit sha> # v0.x.y
+    permissions:
+      contents: write
+      id-token: write
     with:
+      repro_lambda_version: 0.x.y
       manifest_path: lambdas.toml
       aws_dev_role_arn: arn:aws:iam::<account>:role/<dev-builder-role>
       dev_bucket: <dev-env>-my-lambda-artifacts
@@ -252,8 +268,22 @@ attributes (`source_path`, `build_in_docker`, `trigger_on_package_timestamp`,
   the bucket. Check the inline policy resources include both the bucket ARN and
   `${bucket_arn}/*`.
 - **`PreconditionFailed` on every upload**: the artifact already exists with
-  that sha. This is the expected cache-hit behavior; `repro-lambda` treats it
-  as success.
+  that sha. `repro-lambda` then downloads the existing object and accepts it only
+  if its bytes hash to the zip it just built.
+- **`ArtifactIntegrityError`**: an object under the content key does not hold the
+  bytes this source builds. Every upload records the zip's sha256 as object
+  metadata (`x-amz-meta-zip-sha256`) and as the S3 `ChecksumSHA256` in the same
+  first write. A cache hit hashes the object against that record; an object with
+  no record is rebuilt and compared byte for byte. The record is written by the
+  object's writer, so it only proves the bytes did not change after that write:
+  bind them with the `zip_sha256` / `code_sha256` the build JSON reports (pin it
+  next to the key). Pin only rows whose `zip_source` is `built` or `reproduced`;
+  `build --reproduce-cache-hits` (on by default in the reusable workflow's trusted
+  runs) rebuilds every cache hit so none is a bare `record`. `promote` checks the
+  artifact against `--expected-sha256` or the `zip_sha256` that `builds/catalog.json`
+  records for the key, and refuses without one. The key is an input hash anyone
+  with the source can compute, so treat this error as a possibly planted
+  artifact: find who wrote the object before doing anything else.
 - **AWS CLI multipart upload fails with 403**: bucket policy denies multipart
   parts. Pin the multipart threshold above your Lambda size cap:
   `aws configure set s3.multipart_threshold 300MB`.

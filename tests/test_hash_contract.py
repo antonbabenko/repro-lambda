@@ -19,8 +19,19 @@ _PKG = Path(repro_lambda.__file__).parent
 PACKAGING_FINGERPRINTS = {
     "0.8.0": {
         # compile_bytecode: off by default and hashed only when on, so no bump.
-        "build.py": "21b10b59acf04dae78431e1c50ebbb89d300dd5d32bbdd36e0ee9c2cb3673ea9",
+        # Verified cache hits (recorded zip sha256): no change to built bytes, no bump.
+        "build.py": "415bf71e2e0ef1ddaf413993afe05b0c53122064b69068006b489da2a7d1269a",
         "hasher.py": "1061efdcb802598001c9638e34222b25b083c6123ff9b59a18dff996a4e0a70f",
+        "zip_packager.py": "40d48633ece8d5d9ffffdb786d7479b8588ec7b1fae99a7db748e3963f9b333a",
+        "docker_runner.py": "e53208a62ee7ee40e33068b6c3ba936c5e7d75037b1502f1af8fed92391f8f52",
+        "source_stager.py": "38186277fb94ab6feac8a07cad2ae35f5adfaa52bde3d51ac71daccb003d3c68",
+        "sources.py": "10415ccc89b85f521fb64ef199f084f0bea1842032d414cb3d3537334f6caa0b",
+    },
+    # Re-key only: packaged bytes are unchanged (tfr-mxjh.3: retire keys written before
+    # the zip sha256 was recorded and pinned).
+    "0.10.0": {
+        "build.py": "d43140c350e33ecc2d33b14e786cfd062f4357cb0bc735c76e07a64c461724ed",
+        "hasher.py": "7832a6bbbd8e1ea9852e5ce8d021605c09a89611de4c5159b07c167968e81b02",
         "zip_packager.py": "40d48633ece8d5d9ffffdb786d7479b8588ec7b1fae99a7db748e3963f9b333a",
         "docker_runner.py": "e53208a62ee7ee40e33068b6c3ba936c5e7d75037b1502f1af8fed92391f8f52",
         "source_stager.py": "38186277fb94ab6feac8a07cad2ae35f5adfaa52bde3d51ac71daccb003d3c68",
@@ -58,7 +69,8 @@ def test_content_hash_golden_key(tmp_path: Path):
         region="eu-west-1",
     )
     got = compute_content_hash(src, lock, spec, "img@sha256:0", HASH_CONTRACT)
-    assert got == "de8da0c8801288758e8dc86edc15b085ffadc6eb915dcc45d875bfb235854dea"
+    # HASH_CONTRACT 0.10.0 re-key (was de8da0c8...54dea under 0.8.0).
+    assert got == "f62f3dc2776186dd8b5d2ac4729589ff486a53b83348d6a7f13f497164ba8214"
 
 
 # The zip command's exclusion list lives in cli.py; changing it changes the zip bytes.
@@ -72,6 +84,7 @@ ZIP_EXCLUDES = {
         "*.dist-info/REQUESTED",
     ],
 }
+ZIP_EXCLUDES["0.10.0"] = ZIP_EXCLUDES["0.8.0"]
 
 
 def test_zip_excludes_match_the_hash_contract():

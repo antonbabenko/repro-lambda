@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from repro_lambda.build import BuildResult, build_one, compute_sha_for
 from repro_lambda.catalog import Catalog
 from repro_lambda.hasher import HASH_CONTRACT
 from repro_lambda.manifest import BuilderConfig, LambdaSpec
+from repro_lambda.s3_uploader import SHA256_METADATA_KEY
 
 
 @pytest.fixture
@@ -70,6 +72,7 @@ def test_build_one_cache_hit_skips_docker_and_returns_existing_sha(
             Bucket="dev-test-lambda-artifacts",
             Key=f"lambdas/app/{sha}.zip",
             Body=b"existing",
+            Metadata={SHA256_METADATA_KEY: hashlib.sha256(b"existing").hexdigest()},
         )
 
         outcome = build_one(

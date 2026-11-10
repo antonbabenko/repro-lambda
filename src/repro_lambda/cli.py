@@ -77,6 +77,14 @@ def build(
             help="Also write the build summary JSON array to this file (for CI Step Summary).",
         ),
     ] = None,
+    reproduce_cache_hits: Annotated[
+        bool,
+        typer.Option(
+            "--reproduce-cache-hits",
+            help="Rebuild on every cache hit and fail unless the stored zip equals the "
+            "rebuild, so every reported zip_sha256 is this run's own build (pin runs).",
+        ),
+    ] = False,
 ) -> None:
     """Build one lambda (or all) per manifest and upload to S3."""
     import json
@@ -85,6 +93,7 @@ def build(
     from repro_lambda.catalog import load_catalog
     from repro_lambda.git_guard import DirtyWorktreeError, ensure_clean_worktree
     from repro_lambda.manifest import load_manifest
+    from repro_lambda.s3_uploader import code_sha256
 
     repo_root = manifest.parent.resolve()
     parsed = load_manifest(manifest)
@@ -149,6 +158,7 @@ def build(
             source_commit=source_commit,
             dry_run=dry_run,
             sources_token=sources_token,
+            reproduce_cache_hits=reproduce_cache_hits,
         )
         summary.append(
             {
@@ -156,6 +166,21 @@ def build(
                 "outcome": outcome.outcome.value,
                 "sha256": outcome.sha256,
                 "bucket_key": outcome.bucket_key,
+                # Region of the artifact bucket (us-east-1 = the -us-east-1 variant).
+                "region": spec.region,
+                # Bytes behind the key (built, or verified on a cache hit). Pin these:
+                # zip_sha256 is hex, code_sha256 the same digest in base64 (S3
+                # ChecksumSHA256 / Lambda CodeSha256). Absent on a dry run.
+                **(
+                    {
+                        "zip_sha256": outcome.zip_sha256,
+                        "code_sha256": code_sha256(outcome.zip_sha256),
+                        # Pin only "built" / "reproduced"; "record" is the writer's claim.
+                        "zip_source": outcome.zip_source,
+                    }
+                    if outcome.zip_sha256
+                    else {}
+                ),
             }
         )
 
@@ -215,6 +240,15 @@ def promote(
         ),
     ] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    expected_sha256: Annotated[
+        str,
+        typer.Option(
+            "--expected-sha256",
+            help="64-hex sha256 the dev zip body must match (the pinned zip sha256). "
+            "Default: the zip_sha256 builds/catalog.json records for the promoted key; "
+            "promote refuses without one. Single lambda target only.",
+        ),
+    ] = "",
 ) -> None:
     """Copy built artifacts dev -> prod by content hash (no rebuild).
 
@@ -228,11 +262,14 @@ def promote(
 
     from repro_lambda.manifest import load_manifest
     from repro_lambda.promote import (
+        MissingExpectedShaError,
         MissingSourceArtifactError,
         UnknownShaError,
+        expected_from_catalog,
         promote_one,
         sha_from_catalog,
     )
+    from repro_lambda.s3_uploader import ArtifactIntegrityError
 
     repo_root = manifest.parent.resolve()
     parsed = load_manifest(manifest)
@@ -254,6 +291,17 @@ def promote(
             typer.echo(f"--sha must be 64 lowercase hex chars, got {sha!r}", err=True)
             raise typer.Exit(2)
 
+    if expected_sha256:
+        if target == "all" or len(selected) != 1:
+            typer.echo("--expected-sha256 requires a single lambda target (not 'all')", err=True)
+            raise typer.Exit(2)
+        if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
+            typer.echo(
+                f"--expected-sha256 must be 64 lowercase hex chars, got {expected_sha256!r}",
+                err=True,
+            )
+            raise typer.Exit(2)
+
     if not dry_run and (not dev_bucket or not prod_bucket):
         typer.echo(
             "--dev-bucket and --prod-bucket (or REPRO_LAMBDA_DEV_BUCKET / "
@@ -273,8 +321,15 @@ def promote(
                 dev_bucket=dev_bucket,
                 prod_bucket=prod_bucket,
                 dry_run=dry_run,
+                expected_sha256=expected_sha256
+                or expected_from_catalog(catalog_path, spec.logical_name, resolved_sha),
             )
-        except (MissingSourceArtifactError, UnknownShaError) as e:
+        except (
+            MissingExpectedShaError,
+            MissingSourceArtifactError,
+            UnknownShaError,
+            ArtifactIntegrityError,
+        ) as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1) from e
         summary.append(

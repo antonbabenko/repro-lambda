@@ -7,6 +7,14 @@ on:
         type: string
         default: lambdas.toml
         description: Path to lambdas.toml in the caller repo.
+      repro_lambda_version:
+        type: string
+        required: false
+        default: "0.9.1" # x-release-please-version
+        description: >-
+          Exact repro-lambda release run by uvx. Defaults to the release that shipped this
+          workflow, so a caller pinning `uses:` to a commit also pins the tool. Callers
+          that pin anything else (e.g. a pin job's dry run) must pass the same version.
       aws_dev_role_arn:
         type: string
         required: true
@@ -61,8 +69,8 @@ jobs:
     outputs:
       arches: ${{ steps.parse.outputs.arches }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v8.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
       - id: parse
         shell: bash
         run: |
@@ -89,38 +97,68 @@ jobs:
     permissions:
       id-token: write
       contents: write
+    env:
+      # AWS, uploads and catalog commits run only for a push or a manual dispatch on the
+      # caller's default branch. Every other event (pull_request, pull_request_target,
+      # other branches, tags) gets no role: artifact keys are input hashes anyone with the
+      # source can compute and the buckets are first-write-wins.
+      TRUSTED: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+      REPRO_LAMBDA_FROM: repro-lambda==${{ inputs.repro_lambda_version }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v8.2.0
+      # Validate before any step interpolates it (passed through env:, never inlined).
+      - name: Validate repro_lambda_version
+        env:
+          V: ${{ inputs.repro_lambda_version }}
+        run: |
+          [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::repro_lambda_version must be X.Y.Z, got '$V'"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
 
       # Content-addressed source cache, scoped per-arch (a source's sha256 is its key, so a
       # re-pin changes the manifest hash -> fresh fetch; restore-keys reuses the prior cache).
       - name: Cache fetched sources
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: builds/.sources-cache
           key: repro-sources-${{ matrix.arch }}-${{ hashFiles(inputs.manifest_path) }}
           restore-keys: |
             repro-sources-${{ matrix.arch }}-
 
+      # Untrusted events never assume the dev role or write the artifact bucket (see
+      # TRUSTED). A pull request only runs the local reproducibility check below. Callers
+      # should also scope the role's OIDC trust to their default branch.
       - name: Configure AWS credentials (dev)
-        uses: aws-actions/configure-aws-credentials@v6
+        if: env.TRUSTED == 'true'
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: ${{ inputs.aws_dev_role_arn }}
           aws-region: eu-west-1
 
       - name: Build (dev bucket)
+        if: env.TRUSTED == 'true'
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.dev_bucket }}
           REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
-        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --json-out "$RUNNER_TEMP/build-summary.json"
+        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --reproduce-cache-hits --json-out "$RUNNER_TEMP/build-summary.json"
 
       # Render the dev build's content shas + a copy-paste promotion command per function
       # into the run's Step Summary (the build JSON is otherwise buried in step logs).
       # NB: the JSON lives in RUNNER_TEMP (outside the workspace), so hashFiles() can't guard
       # it - run on success() and skip inside the script if the file is somehow absent.
+      # The build JSON carries each artifact's zip_sha256 / code_sha256: bytes this run
+      # built, or rebuilt and matched (--reproduce-cache-hits), never a writer's record.
+      # A caller's pin job downloads it to pin those bytes, not just the input-hash key.
+      - name: Upload build summary (pin input)
+        if: env.TRUSTED == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: repro-lambda-build-summary-${{ matrix.arch }}
+          path: ${{ runner.temp }}/build-summary.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Build summary (content shas + promote commands)
-        if: success()
+        if: success() && env.TRUSTED == 'true'
         env:
           SUMMARY_JSON: ${{ runner.temp }}/build-summary.json
           PROMOTION_REPO: ${{ inputs.promotion_repo }}
@@ -188,24 +226,24 @@ jobs:
 
       - name: Verify reproducible (PR only)
         if: github.event_name == 'pull_request'
-        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --verify --dry-run
+        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --verify --dry-run
 
       - name: Configure AWS credentials (prod)
-        if: github.ref == 'refs/heads/master' && inputs.aws_prod_role_arn != ''
-        uses: aws-actions/configure-aws-credentials@v6
+        if: env.TRUSTED == 'true' && inputs.aws_prod_role_arn != ''
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: ${{ inputs.aws_prod_role_arn }}
           aws-region: eu-west-1
 
       - name: Build (prod bucket)
-        if: github.ref == 'refs/heads/master' && inputs.aws_prod_role_arn != ''
+        if: env.TRUSTED == 'true' && inputs.aws_prod_role_arn != ''
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.prod_bucket }}
           REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
-        run: uvx --from repro-lambda repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
+        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --reproduce-cache-hits
 
-      - name: Commit catalog drift (master only, dev bot)
-        if: github.ref == 'refs/heads/master'
+      - name: Commit catalog drift (default branch only, dev bot)
+        if: env.TRUSTED == 'true'
         run: |
           if [[ -n "$(git status --porcelain builds/catalog.json)" ]]; then
             git config user.email "github-actions[bot]@users.noreply.github.com"
