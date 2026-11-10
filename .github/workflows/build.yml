@@ -10,7 +10,7 @@ on:
       repro_lambda_version:
         type: string
         required: false
-        default: "0.9.1" # x-release-please-version
+        default: "0.10.0" # bump by hand on release: the release token cannot edit workflow files
         description: >-
           Exact repro-lambda release run by uvx. Defaults to the release that shipped this
           workflow, so a caller pinning `uses:` to a commit also pins the tool. Callers
