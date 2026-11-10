@@ -277,8 +277,11 @@ attributes (`source_path`, `build_in_docker`, `trigger_on_package_timestamp`,
   no record is rebuilt and compared byte for byte. The record is written by the
   object's writer, so it only proves the bytes did not change after that write:
   bind them with the `zip_sha256` / `code_sha256` the build JSON reports (pin it
-  next to the key) and pass the pinned value to `promote --expected-sha256`. A
-  source with no record is refused without it. The key is an input hash anyone
+  next to the key). Pin only rows whose `zip_source` is `built` or `reproduced`;
+  `build --reproduce-cache-hits` (on by default in the reusable workflow's trusted
+  runs) rebuilds every cache hit so none is a bare `record`. `promote` checks the
+  artifact against `--expected-sha256` or the `zip_sha256` that `builds/catalog.json`
+  records for the key, and refuses without one. The key is an input hash anyone
   with the source can compute, so treat this error as a possibly planted
   artifact: find who wrote the object before doing anything else.
 - **AWS CLI multipart upload fails with 403**: bucket policy denies multipart

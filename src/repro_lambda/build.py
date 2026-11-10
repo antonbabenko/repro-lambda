@@ -28,9 +28,11 @@ class BuildOutcome:
     outcome: BuildResult
     sha256: str
     bucket_key: str
-    # sha256 of the zip bytes behind bucket_key: built here, or hashed and verified on a
-    # cache hit. None for a dry run. This, not the key, is what a pin must bind.
+    # sha256 of the zip bytes behind bucket_key. None for a dry run. This, not the key,
+    # is what a pin binds, and only when zip_source is "built" or "reproduced": a
+    # "record" value is the object writer's own claim (checked against the body only).
     zip_sha256: str | None = None
+    zip_source: str | None = None  # "built" | "reproduced" | "record"
 
 
 def _bucket_for(spec: LambdaSpec, base_bucket: str) -> str:
@@ -106,8 +108,14 @@ def build_one(
     dry_run: bool = False,
     sources_token: str | None = None,
     sources_cache: Path | None = None,
+    reproduce_cache_hits: bool = False,
 ) -> BuildOutcome:
-    """Build one lambda end-to-end. Returns BuildOutcome with sha + cache verdict."""
+    """Build one lambda end-to-end. Returns BuildOutcome with sha + cache verdict.
+
+    ``reproduce_cache_hits`` rebuilds on every cache hit and fails unless the stored
+    bytes equal the rebuild, so the reported zip_sha256 is this run's own build. Set it
+    on the runs whose output gets pinned.
+    """
     builder = resolve_builder(builder, spec)
     target_bucket = _bucket_for(spec, bucket)
 
@@ -148,21 +156,20 @@ def build_one(
         uploader = S3Uploader(region=spec.region)
         # The key is an input hash anyone can compute and the bucket is first-write-wins,
         # so an existing object is never trusted by its key: its body must match the
-        # sha256 recorded at first write. With no recorded sha256 (a legacy or foreign
-        # object), rebuild and compare the bytes below instead.
-        unrecorded_sha: str | None = None
+        # sha256 recorded at first write. With no record (a legacy or foreign object), or
+        # when the caller asks to reproduce cache hits, rebuild and compare below.
+        compare_sha: str | None = None
         if uploader.exists(bucket=target_bucket, key=bucket_key):
             actual, recorded = uploader.read(bucket=target_bucket, key=bucket_key)
-            if recorded is None:
-                unrecorded_sha = actual
-            elif recorded == actual:
-                _record(catalog, spec, sha, source_commit, builder, built=False)
-                return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, actual)
-            else:
+            if recorded is not None and recorded != actual:
                 raise ArtifactIntegrityError(
                     f"s3://{target_bucket}/{bucket_key}: body sha256 {actual} != "
                     f"recorded sha256 {recorded}"
                 )
+            if recorded is not None and not reproduce_cache_hits:
+                _record(catalog, spec, sha, source_commit, builder, built=False)
+                return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, actual, "record")
+            compare_sha = actual
 
         # Cache miss (or an unrecorded object to compare): fetch + verify + extract
         # declarative sources into the staged tree (post-filter; collides loudly with
@@ -199,23 +206,21 @@ def build_one(
                 node_version=node_ver,
             )
 
-        if unrecorded_sha is not None:
-            built_sha = sha256_hex(out_zip.read_bytes())
-            if built_sha != unrecorded_sha:
+        built_sha = sha256_hex(out_zip.read_bytes())
+        if compare_sha is not None:
+            if built_sha != compare_sha:
                 raise ArtifactIntegrityError(
                     f"s3://{target_bucket}/{bucket_key}: existing body sha256 "
-                    f"{unrecorded_sha} != rebuilt zip sha256 {built_sha}"
+                    f"{compare_sha} != rebuilt zip sha256 {built_sha}"
                 )
-            # The record cannot be backfilled: the bucket denies any overwrite of the key.
-            _record(catalog, spec, sha, source_commit, builder, built=False)
-            return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, built_sha)
+            # A missing record cannot be backfilled: the bucket denies any overwrite.
+            _record(catalog, spec, sha, source_commit, builder, built=False, zip_sha256=built_sha)
+            return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, built_sha, "reproduced")
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}
-        _record(catalog, spec, sha, source_commit, builder, built=True)
-        return BuildOutcome(
-            BuildResult.BUILT_AND_UPLOADED, sha, bucket_key, sha256_hex(out_zip.read_bytes())
-        )
+        _record(catalog, spec, sha, source_commit, builder, built=True, zip_sha256=built_sha)
+        return BuildOutcome(BuildResult.BUILT_AND_UPLOADED, sha, bucket_key, built_sha, "built")
 
 
 def _record(
@@ -226,6 +231,7 @@ def _record(
     builder: BuilderConfig,
     *,
     built: bool,
+    zip_sha256: str | None = None,
 ) -> None:
     if spec.package_manager == "npm":
         primary_image = builder.base_image_nodejs
@@ -244,5 +250,6 @@ def _record(
             builder_version=__version__ if built else f"hash-contract:{HASH_CONTRACT}",
             base_image_digest=primary_image.split("@", 1)[-1],
             built_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            zip_sha256=zip_sha256,
         ),
     )

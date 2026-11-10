@@ -30,7 +30,7 @@ PACKAGING_FINGERPRINTS = {
     # Re-key only: packaged bytes are unchanged (tfr-mxjh.3: retire keys written before
     # the zip sha256 was recorded and pinned).
     "0.10.0": {
-        "build.py": "6a62b56d42f1360037eb969aff88aff5bc4369817bd944896ce4e930e4ba41f0",
+        "build.py": "44af5ceda87faaf73ce3513024460c2f49f26e9a9e616f40dab8ada9c49f693d",
         "hasher.py": "7832a6bbbd8e1ea9852e5ce8d021605c09a89611de4c5159b07c167968e81b02",
         "zip_packager.py": "40d48633ece8d5d9ffffdb786d7479b8588ec7b1fae99a7db748e3963f9b333a",
         "docker_runner.py": "e53208a62ee7ee40e33068b6c3ba936c5e7d75037b1502f1af8fed92391f8f52",

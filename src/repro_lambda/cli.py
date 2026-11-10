@@ -77,6 +77,14 @@ def build(
             help="Also write the build summary JSON array to this file (for CI Step Summary).",
         ),
     ] = None,
+    reproduce_cache_hits: Annotated[
+        bool,
+        typer.Option(
+            "--reproduce-cache-hits",
+            help="Rebuild on every cache hit and fail unless the stored zip equals the "
+            "rebuild, so every reported zip_sha256 is this run's own build (pin runs).",
+        ),
+    ] = False,
 ) -> None:
     """Build one lambda (or all) per manifest and upload to S3."""
     import json
@@ -150,6 +158,7 @@ def build(
             source_commit=source_commit,
             dry_run=dry_run,
             sources_token=sources_token,
+            reproduce_cache_hits=reproduce_cache_hits,
         )
         summary.append(
             {
@@ -164,6 +173,8 @@ def build(
                     {
                         "zip_sha256": outcome.zip_sha256,
                         "code_sha256": code_sha256(outcome.zip_sha256),
+                        # Pin only "built" / "reproduced"; "record" is the writer's claim.
+                        "zip_source": outcome.zip_source,
                     }
                     if outcome.zip_sha256
                     else {}
@@ -232,7 +243,8 @@ def promote(
         typer.Option(
             "--expected-sha256",
             help="64-hex sha256 the dev zip body must match (the pinned zip sha256). "
-            "Required for an artifact with no recorded sha256. Single lambda target only.",
+            "Default: the zip_sha256 builds/catalog.json records for the promoted key; "
+            "promote refuses without one. Single lambda target only.",
         ),
     ] = "",
 ) -> None:
@@ -248,8 +260,10 @@ def promote(
 
     from repro_lambda.manifest import load_manifest
     from repro_lambda.promote import (
+        MissingExpectedShaError,
         MissingSourceArtifactError,
         UnknownShaError,
+        expected_from_catalog,
         promote_one,
         sha_from_catalog,
     )
@@ -305,9 +319,15 @@ def promote(
                 dev_bucket=dev_bucket,
                 prod_bucket=prod_bucket,
                 dry_run=dry_run,
-                expected_sha256=expected_sha256 or None,
+                expected_sha256=expected_sha256
+                or expected_from_catalog(catalog_path, spec.logical_name, resolved_sha),
             )
-        except (MissingSourceArtifactError, UnknownShaError, ArtifactIntegrityError) as e:
+        except (
+            MissingExpectedShaError,
+            MissingSourceArtifactError,
+            UnknownShaError,
+            ArtifactIntegrityError,
+        ) as e:
             typer.echo(str(e), err=True)
             raise typer.Exit(1) from e
         summary.append(

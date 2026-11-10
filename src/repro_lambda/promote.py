@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from repro_lambda.build import _bucket_for
-from repro_lambda.catalog import load_catalog
+from repro_lambda.catalog import load_catalog, zip_sha256_for
 from repro_lambda.manifest import LambdaSpec
 from repro_lambda.s3_uploader import S3Uploader, UploadResult
 
@@ -43,6 +43,15 @@ class MissingSourceArtifactError(RuntimeError):
 
 class UnknownShaError(RuntimeError):
     """builds/catalog.json has no current sha for the requested lambda."""
+
+
+class MissingExpectedShaError(RuntimeError):
+    """No trusted zip sha256 to check the artifact against (catalog or --expected-sha256)."""
+
+
+def expected_from_catalog(catalog_path: Path, logical_name: str, sha: str) -> str | None:
+    """Zip sha256 the source repo's own build recorded for this artifact key, if any."""
+    return zip_sha256_for(load_catalog(catalog_path), logical_name, sha)
 
 
 def sha_from_catalog(catalog_path: Path, logical_name: str) -> str:
@@ -73,8 +82,8 @@ def promote_one(
     variant on both sides, matching the build-side key scheme exactly.
 
     The copy is verified (S3Uploader.copy): the dev object's body must match
-    ``expected_sha256`` (the zip sha256 pinned by the build that produced it) and its
-    recorded sha256. A dev object with no record needs ``expected_sha256``.
+    ``expected_sha256``, the zip sha256 a trusted build recorded (builds/catalog.json)
+    or a pin. It is required: the object's own record is writer-set and never enough.
     """
     src_bucket = _bucket_for(spec, dev_bucket)
     dst_bucket = _bucket_for(spec, prod_bucket)
@@ -83,6 +92,11 @@ def promote_one(
     if dry_run:
         return PromoteOutcome(PromoteResult.DRY_RUN, sha, key, src_bucket, dst_bucket)
 
+    if not expected_sha256:
+        raise MissingExpectedShaError(
+            f"{spec.logical_name}: no trusted zip sha256 for {key} (none in builds/catalog.json"
+            f" and no --expected-sha256); rebuild on the default branch or pass the pinned value"
+        )
     up = uploader or S3Uploader(region=spec.region)
     if not up.exists(bucket=src_bucket, key=key):
         raise MissingSourceArtifactError(

@@ -255,3 +255,57 @@ def test_code_sha256_is_the_base64_digest_s3_and_lambda_report():
     assert (
         code_sha256(_sha(REAL_ZIP)) == base64.b64encode(hashlib.sha256(REAL_ZIP).digest()).decode()
     )
+
+
+def test_reproduce_cache_hits_rebuilds_and_catches_self_asserted_foreign_bytes(repo, s3, docker):
+    s3.put_object(
+        Bucket=BUCKET,
+        Key=_key(repo),
+        Body=MARKER,
+        Metadata={SHA256_METADATA_KEY: _sha(MARKER)},
+    )
+    with pytest.raises(ArtifactIntegrityError):
+        build_one(
+            repo_root=repo,
+            spec=SPEC,
+            builder=BUILDER,
+            bucket=BUCKET,
+            catalog=Catalog(lambdas={}),
+            source_commit="deadbeef",
+            reproduce_cache_hits=True,
+        )
+
+
+def test_reproduced_cache_hit_reports_reproduced_and_records_it_in_the_catalog(repo, s3, docker):
+    _build(repo)
+    catalog = Catalog(lambdas={})
+    out = build_one(
+        repo_root=repo,
+        spec=SPEC,
+        builder=BUILDER,
+        bucket=BUCKET,
+        catalog=catalog,
+        source_commit="deadbeef",
+        reproduce_cache_hits=True,
+    )
+    assert (out.outcome, out.zip_source, out.zip_sha256) == (
+        BuildResult.CACHE_HIT,
+        "reproduced",
+        _sha(REAL_ZIP),
+    )
+    assert catalog.lambdas["app"].history[0].zip_sha256 == _sha(REAL_ZIP)
+
+
+def test_unreproduced_cache_hit_is_marked_record_and_not_written_to_the_catalog(repo, s3, docker):
+    _build(repo)
+    catalog = Catalog(lambdas={})
+    out = build_one(
+        repo_root=repo,
+        spec=SPEC,
+        builder=BUILDER,
+        bucket=BUCKET,
+        catalog=catalog,
+        source_commit="deadbeef",
+    )
+    assert out.zip_source == "record"
+    assert catalog.lambdas["app"].history[0].zip_sha256 is None

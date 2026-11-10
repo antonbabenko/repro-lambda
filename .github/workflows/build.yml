@@ -139,15 +139,15 @@ jobs:
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.dev_bucket }}
           REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
-        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --json-out "$RUNNER_TEMP/build-summary.json"
+        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --reproduce-cache-hits --json-out "$RUNNER_TEMP/build-summary.json"
 
       # Render the dev build's content shas + a copy-paste promotion command per function
       # into the run's Step Summary (the build JSON is otherwise buried in step logs).
       # NB: the JSON lives in RUNNER_TEMP (outside the workspace), so hashFiles() can't guard
       # it - run on success() and skip inside the script if the file is somehow absent.
-      # The build JSON carries each artifact's zip_sha256 / code_sha256 (the bytes built
-      # or verified this run). A caller's pin job downloads it to pin those bytes, not
-      # just the input-hash key.
+      # The build JSON carries each artifact's zip_sha256 / code_sha256: bytes this run
+      # built, or rebuilt and matched (--reproduce-cache-hits), never a writer's record.
+      # A caller's pin job downloads it to pin those bytes, not just the input-hash key.
       - name: Upload build summary (pin input)
         if: env.TRUSTED == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -240,7 +240,7 @@ jobs:
         env:
           REPRO_LAMBDA_BUCKET: ${{ inputs.prod_bucket }}
           REPRO_LAMBDA_SOURCES_TOKEN: ${{ secrets.sources_token }}
-        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}"
+        run: uvx --from "$REPRO_LAMBDA_FROM" repro-lambda build --manifest "${{ inputs.manifest_path }}" --arch "${{ matrix.arch }}" --reproduce-cache-hits
 
       - name: Commit catalog drift (default branch only, dev bot)
         if: env.TRUSTED == 'true'
