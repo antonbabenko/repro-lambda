@@ -59,6 +59,9 @@ def verify_reproducible(
                 builder=builder,
                 stage_dir=stage_dir,
                 extra_files=extras,
+                # Same tree as build_one: without the [[lambda.extra_files]] payload the
+                # check compared two builds of a zip that is never shipped.
+                payload_files=list(spec.extra_files),
             )
             out_zip = stage_dir / "lambda.zip"
             if spec.package_manager == "pip":

@@ -168,17 +168,56 @@ def test_copy_rejects_source_whose_bytes_differ_from_recorded_sha(s3):
     assert not up.exists(bucket=PROD, key=key)
 
 
-def test_copy_rejects_unrecorded_source_unless_allowed(s3):
+def test_copy_rejects_unrecorded_source_without_expected_sha(s3):
     key = _put(s3, BUCKET, REAL_ZIP)
     up = S3Uploader(region="eu-west-1")
 
     with pytest.raises(ArtifactIntegrityError):
         up.copy(src_bucket=BUCKET, dst_bucket=PROD, key=key)
+    with pytest.raises(ArtifactIntegrityError):
+        up.copy(src_bucket=BUCKET, dst_bucket=PROD, key=key, expected_sha256=_sha(MARKER))
+    assert not up.exists(bucket=PROD, key=key)
 
-    assert up.copy(src_bucket=BUCKET, dst_bucket=PROD, key=key, allow_unrecorded=True) is (
+    assert up.copy(src_bucket=BUCKET, dst_bucket=PROD, key=key, expected_sha256=_sha(REAL_ZIP)) is (
         UploadResult.UPLOADED
     )
-    assert up.verify(bucket=PROD, key=key) == _sha(REAL_ZIP)
+    assert up.verify(bucket=PROD, key=key, expected_sha256=_sha(REAL_ZIP)) == _sha(REAL_ZIP)
+
+
+def test_self_asserted_record_is_not_trusted_against_a_pin(s3):
+    # A writer that plants foreign bytes can also write a matching record. The record
+    # alone then passes; only the pinned sha256 (written by the master build) catches it.
+    key = _put(s3, BUCKET, MARKER, recorded=_sha(MARKER))
+    up = S3Uploader(region="eu-west-1")
+
+    assert up.verify(bucket=BUCKET, key=key) == _sha(MARKER)
+    with pytest.raises(ArtifactIntegrityError):
+        up.verify(bucket=BUCKET, key=key, expected_sha256=_sha(REAL_ZIP))
+    with pytest.raises(ArtifactIntegrityError):
+        up.copy(src_bucket=BUCKET, dst_bucket=PROD, key=key, expected_sha256=_sha(REAL_ZIP))
+    assert not up.exists(bucket=PROD, key=key)
+
+
+def test_build_reports_the_zip_sha256_it_verified(repo, s3, docker):
+    built = _build(repo)
+    assert built.zip_sha256 == _sha(REAL_ZIP)
+    cached = _build(repo)
+    assert cached.outcome == BuildResult.CACHE_HIT
+    assert cached.zip_sha256 == _sha(REAL_ZIP)
+
+
+def test_self_asserted_foreign_cache_hit_reports_the_foreign_sha(repo, s3, docker):
+    # A self-consistent planted object is a cache hit, but the build reports ITS bytes'
+    # sha256, so the pin binds what is really there and the later pin check (promote,
+    # Terraform) never matches a reviewed rebuild of the source.
+    s3.put_object(
+        Bucket=BUCKET,
+        Key=_key(repo),
+        Body=MARKER,
+        Metadata={SHA256_METADATA_KEY: _sha(MARKER)},
+    )
+    outcome = _build(repo)
+    assert outcome.zip_sha256 == _sha(MARKER) != _sha(REAL_ZIP)
 
 
 def test_copy_checks_expected_sha(s3):
@@ -206,3 +245,13 @@ def test_copy_records_sha_on_destination(s3):
     assert up.copy(src_bucket=BUCKET, dst_bucket=PROD, key=key) is UploadResult.ALREADY_PRESENT
     head = s3.head_object(Bucket=PROD, Key=key)
     assert head["Metadata"][SHA256_METADATA_KEY] == _sha(REAL_ZIP)
+
+
+def test_code_sha256_is_the_base64_digest_s3_and_lambda_report():
+    import base64
+
+    from repro_lambda.s3_uploader import code_sha256
+
+    assert (
+        code_sha256(_sha(REAL_ZIP)) == base64.b64encode(hashlib.sha256(REAL_ZIP).digest()).decode()
+    )

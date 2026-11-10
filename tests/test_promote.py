@@ -319,7 +319,7 @@ def test_cli_promote_sha_invalid_hex_exits_2(tmp_path: Path):
     assert result.exit_code == 2  # not 64-hex
 
 
-def test_cli_promote_unrecorded_artifact_needs_allow_unrecorded(tmp_path: Path):
+def test_cli_promote_unrecorded_artifact_needs_matching_expected_sha256(tmp_path: Path):
     repo = _consumer(tmp_path)
     with mock_aws():
         c = boto3.client("s3", region_name="eu-west-1")
@@ -338,12 +338,20 @@ def test_cli_promote_unrecorded_artifact_needs_allow_unrecorded(tmp_path: Path):
             "--sha",
             _EXPLICIT_SHA,
         ]
+        dst = f"lambdas/app/{_EXPLICIT_SHA}.zip"
 
-        refused = runner.invoke(app, args)
-        assert refused.exit_code == 1
-        assert not S3Uploader(region="eu-west-1").exists(
-            bucket=PROD, key=f"lambdas/app/{_EXPLICIT_SHA}.zip"
-        )
+        assert runner.invoke(app, args).exit_code == 1
+        wrong = runner.invoke(app, [*args, "--expected-sha256", "b" * 64])
+        assert wrong.exit_code == 1
+        assert not S3Uploader(region="eu-west-1").exists(bucket=PROD, key=dst)
 
-        allowed = runner.invoke(app, [*args, "--allow-unrecorded"])
-        assert allowed.exit_code == 0, allowed.stdout
+        ok = runner.invoke(app, [*args, "--expected-sha256", hashlib.sha256(b"z").hexdigest()])
+        assert ok.exit_code == 0, ok.stdout
+        assert S3Uploader(region="eu-west-1").exists(bucket=PROD, key=dst)
+
+
+def test_cli_promote_expected_sha256_shape_and_target(tmp_path: Path):
+    repo = _consumer(tmp_path)
+    base = ["promote", "--manifest", str(repo / "lambdas.toml"), "--dry-run"]
+    assert runner.invoke(app, [*base, "app", "--expected-sha256", "XYZ"]).exit_code == 2
+    assert runner.invoke(app, [*base, "all", "--expected-sha256", "a" * 64]).exit_code == 2

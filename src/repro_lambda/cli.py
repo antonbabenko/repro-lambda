@@ -85,6 +85,7 @@ def build(
     from repro_lambda.catalog import load_catalog
     from repro_lambda.git_guard import DirtyWorktreeError, ensure_clean_worktree
     from repro_lambda.manifest import load_manifest
+    from repro_lambda.s3_uploader import code_sha256
 
     repo_root = manifest.parent.resolve()
     parsed = load_manifest(manifest)
@@ -156,6 +157,17 @@ def build(
                 "outcome": outcome.outcome.value,
                 "sha256": outcome.sha256,
                 "bucket_key": outcome.bucket_key,
+                # Bytes behind the key (built, or verified on a cache hit). Pin these:
+                # zip_sha256 is hex, code_sha256 the same digest in base64 (S3
+                # ChecksumSHA256 / Lambda CodeSha256). Absent on a dry run.
+                **(
+                    {
+                        "zip_sha256": outcome.zip_sha256,
+                        "code_sha256": code_sha256(outcome.zip_sha256),
+                    }
+                    if outcome.zip_sha256
+                    else {}
+                ),
             }
         )
 
@@ -215,14 +227,14 @@ def promote(
         ),
     ] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
-    allow_unrecorded: Annotated[
-        bool,
+    expected_sha256: Annotated[
+        str,
         typer.Option(
-            "--allow-unrecorded",
-            help="Accept a dev artifact with no recorded zip sha256 (built before "
-            "recording existed). Check it against a reproducible rebuild first.",
+            "--expected-sha256",
+            help="64-hex sha256 the dev zip body must match (the pinned zip sha256). "
+            "Required for an artifact with no recorded sha256. Single lambda target only.",
         ),
-    ] = False,
+    ] = "",
 ) -> None:
     """Copy built artifacts dev -> prod by content hash (no rebuild).
 
@@ -263,6 +275,17 @@ def promote(
             typer.echo(f"--sha must be 64 lowercase hex chars, got {sha!r}", err=True)
             raise typer.Exit(2)
 
+    if expected_sha256:
+        if target == "all" or len(selected) != 1:
+            typer.echo("--expected-sha256 requires a single lambda target (not 'all')", err=True)
+            raise typer.Exit(2)
+        if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
+            typer.echo(
+                f"--expected-sha256 must be 64 lowercase hex chars, got {expected_sha256!r}",
+                err=True,
+            )
+            raise typer.Exit(2)
+
     if not dry_run and (not dev_bucket or not prod_bucket):
         typer.echo(
             "--dev-bucket and --prod-bucket (or REPRO_LAMBDA_DEV_BUCKET / "
@@ -282,7 +305,7 @@ def promote(
                 dev_bucket=dev_bucket,
                 prod_bucket=prod_bucket,
                 dry_run=dry_run,
-                allow_unrecorded=allow_unrecorded,
+                expected_sha256=expected_sha256 or None,
             )
         except (MissingSourceArtifactError, UnknownShaError, ArtifactIntegrityError) as e:
             typer.echo(str(e), err=True)

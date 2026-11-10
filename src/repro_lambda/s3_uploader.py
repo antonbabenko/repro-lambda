@@ -34,7 +34,8 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _checksum_b64(hex_digest: str) -> str:
+def code_sha256(hex_digest: str) -> str:
+    """Base64 form of a sha256: what S3 ChecksumSHA256 and Lambda CodeSha256 report."""
     return base64.b64encode(bytes.fromhex(hex_digest)).decode()
 
 
@@ -65,14 +66,14 @@ class S3Uploader:
         bucket: str,
         key: str,
         expected_sha256: str | None = None,
-        allow_unrecorded: bool = False,
     ) -> str:
         """Hash the object and check it; return its sha256 or raise ArtifactIntegrityError.
 
-        The body must match the recorded sha256 and, when given, ``expected_sha256``.
-        An object with no recorded sha256 (written before recording existed, or by a
-        writer that skipped it) passes only against ``expected_sha256`` or with
-        ``allow_unrecorded``.
+        The body must match ``expected_sha256`` when given, and the recorded sha256 when
+        the object has one. The record is written by the object's writer, so it only
+        proves the body was not changed after that write; ``expected_sha256`` (from a
+        pin, or a build of the reviewed source) is what binds the bytes to the source.
+        An object with no record passes only against ``expected_sha256``.
         """
         actual, recorded = self.read(bucket=bucket, key=key)
         where = f"s3://{bucket}/{key}"
@@ -84,7 +85,7 @@ class S3Uploader:
             raise ArtifactIntegrityError(
                 f"{where}: body sha256 {actual} != expected {expected_sha256}"
             )
-        if recorded is None and expected_sha256 is None and not allow_unrecorded:
+        if recorded is None and expected_sha256 is None:
             raise ArtifactIntegrityError(
                 f"{where}: no recorded {SHA256_METADATA_KEY} and no expected sha256 to "
                 f"check it against"
@@ -98,22 +99,17 @@ class S3Uploader:
         dst_bucket: str,
         key: str,
         expected_sha256: str | None = None,
-        allow_unrecorded: bool = False,
     ) -> UploadResult:
         """
         Server-side copy of the same key from src_bucket to dst_bucket, verified.
 
-        The source is hashed and checked before the copy (see ``verify``). The
+        The source is hashed and checked before the copy (see ``verify``); pass
+        ``expected_sha256`` from the pin so a self-consistent foreign object fails. The
         destination, new or already present, must then hash to the same sha256, so a
         pre-existing destination object with other bytes fails instead of reading as
         "already promoted". The copy records the sha256 on the destination.
         """
-        src_sha = self.verify(
-            bucket=src_bucket,
-            key=key,
-            expected_sha256=expected_sha256,
-            allow_unrecorded=allow_unrecorded,
-        )
+        src_sha = self.verify(bucket=src_bucket, key=key, expected_sha256=expected_sha256)
         if self.exists(bucket=dst_bucket, key=key):
             self.verify(bucket=dst_bucket, key=key, expected_sha256=src_sha)
             return UploadResult.ALREADY_PRESENT
@@ -147,7 +143,7 @@ class S3Uploader:
                 IfNoneMatch="*",
                 ServerSideEncryption="AES256",
                 Metadata={SHA256_METADATA_KEY: digest},
-                ChecksumSHA256=_checksum_b64(digest),
+                ChecksumSHA256=code_sha256(digest),
             )
             return UploadResult.UPLOADED
         except ClientError as e:

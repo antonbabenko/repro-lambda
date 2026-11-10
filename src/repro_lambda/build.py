@@ -28,6 +28,9 @@ class BuildOutcome:
     outcome: BuildResult
     sha256: str
     bucket_key: str
+    # sha256 of the zip bytes behind bucket_key: built here, or hashed and verified on a
+    # cache hit. None for a dry run. This, not the key, is what a pin must bind.
+    zip_sha256: str | None = None
 
 
 def _bucket_for(spec: LambdaSpec, base_bucket: str) -> str:
@@ -154,7 +157,7 @@ def build_one(
                 unrecorded_sha = actual
             elif recorded == actual:
                 _record(catalog, spec, sha, source_commit, builder, built=False)
-                return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
+                return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, actual)
             else:
                 raise ArtifactIntegrityError(
                     f"s3://{target_bucket}/{bucket_key}: body sha256 {actual} != "
@@ -203,13 +206,16 @@ def build_one(
                     f"s3://{target_bucket}/{bucket_key}: existing body sha256 "
                     f"{unrecorded_sha} != rebuilt zip sha256 {built_sha}"
                 )
+            # The record cannot be backfilled: the bucket denies any overwrite of the key.
             _record(catalog, spec, sha, source_commit, builder, built=False)
-            return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key)
+            return BuildOutcome(BuildResult.CACHE_HIT, sha, bucket_key, built_sha)
 
         result = uploader.upload(bucket=target_bucket, key=bucket_key, body_path=out_zip)
         assert result in {UploadResult.UPLOADED, UploadResult.ALREADY_PRESENT}
         _record(catalog, spec, sha, source_commit, builder, built=True)
-        return BuildOutcome(BuildResult.BUILT_AND_UPLOADED, sha, bucket_key)
+        return BuildOutcome(
+            BuildResult.BUILT_AND_UPLOADED, sha, bucket_key, sha256_hex(out_zip.read_bytes())
+        )
 
 
 def _record(
