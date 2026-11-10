@@ -9,9 +9,7 @@
       "bump-patch-for-minor-pre-major": false,
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
-        "src/repro_lambda/__init__.py",
-        { "type": "generic", "path": ".github/workflows/build.yml" },
-        { "type": "generic", "path": ".github/workflows/promote.yml" }
+        "src/repro_lambda/__init__.py"
       ],
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
