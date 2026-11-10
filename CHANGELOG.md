@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/antonbabenko/repro-lambda/compare/v0.9.1...v0.10.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* HASH_CONTRACT is 0.10.0, so every artifact gets a new key on its next build. `promote` now requires a trusted expected sha256 (`--expected-sha256` or the committed catalog) and `--allow-unrecorded` is removed. Trusted builds pass `--reproduce-cache-hits` and a pin-grade row needs a matching S3 ChecksumSHA256.
+
+### Features
+
+* verify artifact bytes against a recorded zip sha256 ([#26](https://github.com/antonbabenko/repro-lambda/issues/26)) ([f2166d6](https://github.com/antonbabenko/repro-lambda/commit/f2166d6b76d7cfdf6be6029439ead5feb58a053a))
+
+
+### Bug Fixes
+
+* **release:** stop release-please editing workflow files ([#27](https://github.com/antonbabenko/repro-lambda/issues/27)) ([ca7d18a](https://github.com/antonbabenko/repro-lambda/commit/ca7d18afb0ec512a810ad74d78bb4149812eb96d))
+
 ## [0.9.1](https://github.com/antonbabenko/repro-lambda/compare/v0.9.0...v0.9.1) (2026-11-09)
 
 
